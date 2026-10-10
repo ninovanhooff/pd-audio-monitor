@@ -20,8 +20,9 @@ import numpy as np
 RATE = 44100
 BLOCK = 1024
 PLAYDATE_VID = 0x1331
-# The virtual device whose output the host captures: BlackHole, or VB-Cable (its input is "CABLE Output").
-DEFAULT_DEVICE = "CABLE Output" if sys.platform == "win32" else "BlackHole"
+# Virtual devices the host captures, best first: BlackHole; VB-Cable (its input is "CABLE Output"), else
+# VoiceMeeter's virtual output.
+PREFERRED_DEVICES = ("CABLE Output", "VoiceMeeter Output") if sys.platform == "win32" else ("BlackHole",)
 # The receiver logs this over USB when the user picks a format on the Playdate.
 FORMAT_REQUEST = re.compile(rb"pdstream format (\d+)")
 # Packet layout is in usb-stream/receiver/src/packet.h.
@@ -391,6 +392,10 @@ def find_input(name):
     return next((d for d in input_devices() if wanted in d["name"].lower()), None)
 
 
+def preferred_input():
+    return next((d for d in map(find_input, PREFERRED_DEVICES) if d), None)
+
+
 def stream_device(name, codec, sink, stats, names, stop=None):
     import sounddevice as sd
 
@@ -447,8 +452,8 @@ def main():
                                      epilog="formats:\n" + "\n".join(f"  {i}  {n}" for i, n in enumerate(formats)))
     parser.add_argument("--format", type=int, default=lib.pdstream_default_format(),
                         help="format number, see below; the Playdate's d-pad switches it while streaming")
-    parser.add_argument("--device", default=DEFAULT_DEVICE,
-                        help=f"input device name or part of it (default {DEFAULT_DEVICE})")
+    parser.add_argument("--device", help="input device name or part of it (default: the first of "
+                                         + ", ".join(PREFERRED_DEVICES) + " found)")
     parser.add_argument("--input", type=Path, help="stream a 16-bit 44.1 kHz WAV file instead of a device")
     parser.add_argument("--port", help="serial port (default: the first Playdate found)")
     parser.add_argument("--out", type=Path, help="write what would go to the Playdate to a file")
@@ -464,7 +469,8 @@ def main():
         if args.input:
             stream_file(args.input, codec, sink, stats, formats, paced=not args.out)
         else:
-            stream_device(args.device, codec, sink, stats, formats)
+            found = None if args.device else preferred_input()
+            stream_device(args.device or (found["name"] if found else PREFERRED_DEVICES[0]), codec, sink, stats, formats)
     except KeyboardInterrupt:
         pass
     console.finish()

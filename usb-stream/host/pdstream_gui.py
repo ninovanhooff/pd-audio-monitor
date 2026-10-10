@@ -31,14 +31,14 @@ SETUP_WINDOWS = [
      "(Recording tab); the Playdate plays a few hundred ms later.",
      [("Sound settings", lambda: subprocess.run(["cmd", "/c", "start", "ms-settings:sound"]))]),
     ("Pick CABLE Output as the Input", "Above, under Input: the host app captures from the device that "
-     "receives the audio, CABLE Output. It is picked by default when present; press ↻ after installing "
-     "VB-Cable. Never pick your speakers or a microphone.", []),
+     "receives the audio, CABLE Output (or VoiceMeeter Output). It is picked by default when present; press ↻ "
+     "after installing VB-Cable. Never pick your speakers or a microphone.", []),
     ("Start PD Audio Monitor Receiver on the Playdate", "Install PDAudioMonitorReceiver.pdx, start it, "
      "and keep the Playdate connected over USB and unlocked.", []),
 ]
 
 TROUBLESHOOTING_WINDOWS = [
-    ("Wrong input, or \"Error starting stream\"", "Pick CABLE Output under Input (↻ refreshes the list). "
+    ("Wrong input, or \"Error starting stream\"", "Pick CABLE Output or VoiceMeeter Output under Input (↻ refreshes the list). "
      "Inputs that aren't receiving audio, such as a microphone or speakers, stay silent or fail to start.", []),
     ("Peak stays at -99 dBFS", "Nothing reaches CABLE Input: check Windows' (or the player's) output device."),
     ("Waiting for a Playdate", "Plug it in and unlock it. Quit the Playdate Simulator: it also holds the "
@@ -177,10 +177,10 @@ class App:
         current = self.device.get()
         self.device["values"] = names
         if current not in names:
-            virtual = [name for name in names if pdstream.DEFAULT_DEVICE.lower() in name.lower()]
-            self.device.set(virtual[0] if virtual else names[0] if names else "")
+            virtual = pdstream.preferred_input()
+            self.device.set(virtual["name"] if virtual else names[0] if names else "")
             if not virtual:
-                self.write_log(f"{pdstream.DEFAULT_DEVICE} not found: see Setup, then press ↻ and pick it under Input.")
+                self.write_log(f"{pdstream.PREFERRED_DEVICES[0]} not found: see Setup, then press ↻ and pick it under Input.")
 
     def write_log(self, text):
         self.log.configure(state="normal")
