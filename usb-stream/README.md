@@ -89,8 +89,9 @@ on a Playdate over `msg`, and the bypass plays over `eval` (86 `eval`/s measured
   characters.
 - `eval`: each packet is 1024 raw bytes inside `eval <length>\n<Lua bytecode>`. The bytecode is a
   call `pdstream_feed("<packet>")`, built around the packet from a template that equals pdc's output
-  (`EVAL_HEAD` in `pdstream.py`; the tests compare it with pdc). The receiver's `main.lua` starts
-  the Lua runtime that `eval` runs in, and C registers `pdstream_feed`. `eval` doesn't work in
+  (`EVAL_HEAD` in `pdstream.py`; the tests compare it with pdc). The receiver's empty `main.lua`
+  starts the Lua runtime that `eval` runs in; C registers `pdstream_feed` and sets its update
+  callback once that runtime is up (`kEventInitLua`). `eval` doesn't work in
   apps from Catalog.
 
 `pdstream.py` sends `echo off` when it opens the port. A packet holds:

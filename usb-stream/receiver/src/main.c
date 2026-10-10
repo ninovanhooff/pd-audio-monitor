@@ -316,12 +316,6 @@ static int update(void* userdata) {
     return 1;
 }
 
-static int updateFromLua(lua_State* L) {
-    (void)L;
-    update(NULL);
-    return 0;
-}
-
 static LCDFont* loadFont(const char* path) {
     const char* error;
     LCDFont* font = pd->graphics->loadFont(path, &error);
@@ -334,16 +328,13 @@ __declspec(dllexport)
 #endif
 int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     (void)arg;
-    // Lua runs the frame (main.lua calls pdstream_update): a C update callback would leave the game
-    // without the Lua runtime, and `eval` needs it.
-    if (event == kEventInitLua) {
-        const char* error;
-        if (!pd->lua->addFunction(feed, "pdstream_feed", &error)) pd->system->logToConsole("pdstream_feed: %s", error);
-        if (!pd->lua->addFunction(updateFromLua, "pdstream_update", &error)) pd->system->logToConsole("pdstream_update: %s", error);
-        return 0;
-    }
-    if (event != kEventInit) return 0;
+    // Setting up at kEventInitLua, after the Lua runtime starts: a C update callback set at
+    // kEventInit keeps it from starting, and `eval` needs it.
+    if (event != kEventInitLua) return 0;
     pd = playdate;
+
+    const char* error;
+    if (!pd->lua->addFunction(feed, "pdstream_feed", &error)) pd->system->logToConsole("pdstream_feed: %s", error);
 
     fonts.label = loadFont("/System/Fonts/Roobert-11-Bold.pft");
     fonts.value = loadFont("/System/Fonts/Roobert-11-Medium.pft");
@@ -364,5 +355,7 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     pd->sound->addSource(sourceCallback, NULL, 0);
     pd->system->setSerialMessageCallback(receive);
     replay = pd->file->open("replay.txt", kFileReadData);
+
+    pd->system->setUpdateCallback(update, NULL);
     return 0;
 }
