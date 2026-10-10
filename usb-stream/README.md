@@ -8,7 +8,8 @@ format. The signal stays digital end to end, so there's none of the analog noise
 
 ```
 DAW / any app ──► BlackHole 2ch ──► pdstream.py ──USB serial `eval`──────► receiver app ──► speaker
-                  (virtual output)  decimate + encode                       decode + interpolate
+                  or VB-Cable       decimate + encode                       decode + interpolate
+                  (virtual output)
 ```
 
 The two halves are the format chain split in two (`shared/codec/format_stream.c`): what plays
@@ -16,46 +17,58 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 
 ## Installation
 
+Download the host app for your system and the receiver, `PDAudioMonitorReceiver-….pdx.zip`, from
+the [latest release](https://github.com/ninovanhooff/pd-audio-monitor/releases/latest), and
+sideload the receiver: upload the pdx zip at [play.date/account/sideload](https://play.date/account/sideload),
+or unzip it into the Playdate's `Games` folder in Data Disk mode. Then follow the steps for your system.
+
+### macOS
+
 Needs an Apple Silicon Mac on macOS 26 or later and a Playdate.
 
-1. Download `PD-Audio-Monitor-Host-…-macos-arm64.zip` and `PDAudioMonitorReceiver-….pdx.zip` from
-   the [latest release](https://github.com/ninovanhooff/pd-audio-monitor/releases/latest).
-2. Sideload the receiver: upload the pdx zip at [play.date/account/sideload](https://play.date/account/sideload),
-   or unzip it into the Playdate's `Games` folder in Data Disk mode.
-3. Install [BlackHole](https://existential.audio/blackhole/) 2ch: `brew install blackhole-2ch`.
-4. In **Audio MIDI Setup**, set BlackHole 2ch to **44.1 kHz**.
+1. Download `PD-Audio-Monitor-Host-…-macos-arm64.zip`.
+2. Install [BlackHole](https://existential.audio/blackhole/) 2ch: `brew install blackhole-2ch`.
+3. In **Audio MIDI Setup**, set BlackHole 2ch to **44.1 kHz**.
    To also hear the Mac, create a *Multi-Output Device* with BlackHole and your
    headphones. The Playdate plays a few hundred ms later.
-5. Send audio to BlackHole (or the Multi-Output Device), either as the system output or as your
+4. Send audio to BlackHole (or the Multi-Output Device), either as the system output or as your
    DAW's output device.
-6. Unzip PD Audio Monitor Host and move it to Applications. It isn't notarized, so the first time,
+5. Unzip PD Audio Monitor Host and move it to Applications. It isn't notarized, so the first time,
    right-click it and choose **Open**.
-7. Connect the Playdate over USB, unlock it, and start PD Audio Monitor Receiver. Then open
+6. Connect the Playdate over USB, unlock it, and start PD Audio Monitor Receiver. Then open
    PD Audio Monitor Host: it finds the Playdate and starts streaming from BlackHole.
-8. Allow microphone access when macOS asks: that is how the host app hears BlackHole. Nothing is
+7. Allow microphone access when macOS asks: that is how the host app hears BlackHole. Nothing is
    recorded from a microphone.
 
 ### Windows
 
 Needs Windows 10 or later and a Playdate. The Playdate shows up as a COM port without a driver.
 
-1. Download `PD-Audio-Monitor-Host-…-windows-x64.zip` and `PDAudioMonitorReceiver-….pdx.zip` from
-   the latest release, and sideload the receiver as above.
+1. Download `PD-Audio-Monitor-Host-…-windows-x64.zip` and unzip it.
 2. Install [VB-Cable](https://vb-audio.com/Cable/) and restart Windows.
 3. Send audio to **CABLE Input**, either as the system output or as your player's or DAW's output
    device. To also hear it on the PC, tick *Listen to this device* on CABLE Output's properties
    (Recording tab).
 4. Connect the Playdate over USB, unlock it, start PD Audio Monitor Receiver, then run
    PD Audio Monitor Host. It isn't signed, so SmartScreen asks once: *More info → Run anyway*.
+5. Under **Input**, check that CABLE Output is picked (↻ refreshes the list).
 
-To build it, install Python, MinGW-w64 gcc and `pip install numpy pyserial sounddevice pyinstaller`, then:
+Any input that receives the audio works. If CABLE Output is missing, the host falls back to
+`VoiceMeeter Output`, the virtual output of VoiceMeeter; pick something else under Input
+(or with `--device`) if you route audio elsewhere. Never pick a microphone or your speakers.
+
+### Windows: build
+
+Install Python, MinGW-w64 gcc and `pip install numpy pyserial sounddevice pyinstaller`, then:
 
 ```bash
 gcc -std=c11 -O2 -shared -static-libgcc -Ishared/codec -o usb-stream/host/libpdstream.dll usb-stream/host/encoder.c shared/codec/format_stream.c shared/codec/format_chain.c shared/codec/ima_adpcm.c
 cd usb-stream/host && python -m PyInstaller --noconfirm --workpath build/app --distpath dist host.spec
 ```
 
-`pdstream.py --device` defaults to `CABLE Output` on Windows.
+`pdstream.py --device` takes part of an input's name. It defaults to the first of `CABLE Output` and
+`VoiceMeeter Output` that exists on Windows, and `BlackHole` on macOS. The receiver needs the
+Playdate SDK's ARM toolchain and isn't built on Windows: take it from the release, or build it on a Mac.
 
 The host app's Setup and Troubleshooting tabs repeat these steps and cover the usual problems.
 If the serial port is busy, quit the Playdate Simulator; it also talks to the device over USB.
@@ -91,6 +104,7 @@ A Playdate takes about 86 `eval`s a second (measured with the bypass), so every 
 
 ### Build and run
 
+This section is for macOS (Linux works for everything but the `.app`); for the Windows host, see above.
 Building needs the Xcode command line tools, and the receiver needs the Playdate SDK.
 
 1. Build the encoder library and install the Python packages:
@@ -134,6 +148,12 @@ Building needs the Xcode command line tools, and the receiver needs the Playdate
    same CPU (each start unpacks it first, which takes about 3 s). The app asks microphone access for
    itself. Each build has a new signature, so after a rebuild you may need to allow it again:
    `tccutil reset Microphone nl.ninovanhooff.pdstream`.
+
+### Releases
+
+`.github/workflows/release-builds.yml` builds the Windows host (`.exe` in a zip) and the receiver
+(`.pdx` zip) on GitHub: run it from the Actions tab, or push a `v*` tag for a release that already
+exists, and it attaches both zips. The macOS host is built locally, as above.
 
 ### Protocol
 
