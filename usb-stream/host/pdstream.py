@@ -200,18 +200,21 @@ class SerialSink:
 
     def _drain(self, port):
         pending = b""
-        try:
-            while True:
+        # A read can fail while the Playdate is busy and work again afterwards; only a port this sink has
+        # let go of ends the loop, or the Playdate's format requests would go unheard.
+        while self.port is port:
+            try:
                 *complete, pending = (pending + port.read(4096)).split(b"\n")
-                for line in complete:
-                    # Each eval answers with an empty line.
-                    if self.verbose and line.strip():
-                        console.log(line.decode(errors="replace").rstrip())
-                    match = FORMAT_REQUEST.search(line)
-                    if match:
-                        self.requested_format = int(match.group(1))
-        except (self.serial.SerialException, OSError, TypeError):
-            pass  # write() notices the lost port; closing it mid-read can raise TypeError
+            except (self.serial.SerialException, OSError, TypeError):
+                time.sleep(0.05)
+                continue
+            for line in complete:
+                # Each eval answers with an empty line.
+                if self.verbose and line.strip():
+                    console.log(line.decode(errors="replace").rstrip())
+                match = FORMAT_REQUEST.search(line)
+                if match:
+                    self.requested_format = int(match.group(1))
 
     def _reconnect(self):
         now = time.monotonic()
