@@ -30,11 +30,16 @@ SETUP_WINDOWS = [
      "output device. To hear it on the PC too, tick \"Listen to this device\" on CABLE Output's properties "
      "(Recording tab); the Playdate plays a few hundred ms later.",
      [("Sound settings", lambda: subprocess.run(["cmd", "/c", "start", "ms-settings:sound"]))]),
+    ("Pick CABLE Output as the Input", "Above, under Input: the host app captures from the device that "
+     "receives the audio, CABLE Output. It is picked by default when present; press ↻ after installing "
+     "VB-Cable. Never pick your speakers or a microphone.", []),
     ("Start PD Audio Monitor Receiver on the Playdate", "Install PDAudioMonitorReceiver.pdx, start it, "
      "and keep the Playdate connected over USB and unlocked.", []),
 ]
 
 TROUBLESHOOTING_WINDOWS = [
+    ("Wrong input, or \"Error starting stream\"", "Pick CABLE Output under Input (↻ refreshes the list). "
+     "Inputs that aren't receiving audio, such as a microphone or speakers, stay silent or fail to start.", []),
     ("Peak stays at -99 dBFS", "Nothing reaches CABLE Input: check Windows' (or the player's) output device."),
     ("Waiting for a Playdate", "Plug it in and unlock it. Quit the Playdate Simulator: it also holds the "
      "Playdate's serial port."),
@@ -49,6 +54,9 @@ SETUP = SETUP_WINDOWS if WINDOWS else [
      [("Audio MIDI Setup", lambda: subprocess.run(["open", "-a", "Audio MIDI Setup"]))]),
     ("Send audio to BlackHole", "Pick BlackHole (or the Multi-Output Device) as the Mac's sound output, "
      "or as your DAW's output device.", [("Sound settings", lambda: subprocess.run(["open", SOUND_SETTINGS]))]),
+    ("Pick BlackHole 2ch as the Input", "Above, under Input: the host app captures from BlackHole 2ch. It is "
+     "picked by default when present; press ↻ after installing it. Never pick a microphone: "
+     "that records the room instead.", []),
     ("Start PD Audio Monitor Receiver on the Playdate", "Install PDAudioMonitorReceiver.pdx, start it, "
      "and keep the Playdate connected over USB and unlocked.", []),
     ("Allow microphone access", "macOS asks when the host app first captures: that is how it lets it hear "
@@ -57,6 +65,8 @@ SETUP = SETUP_WINDOWS if WINDOWS else [
 ]
 
 TROUBLESHOOTING = TROUBLESHOOTING_WINDOWS if WINDOWS else [
+    ("Wrong input", "Pick BlackHole 2ch under Input (↻ refreshes the list). A microphone records the room, "
+     "and other inputs stay silent.", []),
     ("Peak stays at -99 dBFS", "Nothing reaches BlackHole: check the Mac's (or the DAW's) output device. "
      "If the microphone row isn't \"Authorized\", allow PD Audio Monitor Host in Microphone settings, then "
      "press Reopen: macOS applies the change only to a new launch."),
