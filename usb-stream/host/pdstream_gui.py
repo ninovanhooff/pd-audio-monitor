@@ -108,7 +108,7 @@ class App:
         self.format.bind("<<ComboboxSelected>>", lambda event: self.pick_format())
         self.toggle = ttk.Button(controls, text="Stop", command=self.toggle_stream)
         self.toggle.pack(side="right")
-        ttk.Button(controls, text="↻", width=2, command=self.list_devices).pack(side="right", padx=4)
+        ttk.Button(controls, text="↻", width=2, command=lambda: (self.list_devices(), self.restart_stream())).pack(side="right", padx=4)
 
         tabs = ttk.Notebook(main)
         tabs.pack(fill="both", expand=True)
@@ -184,6 +184,7 @@ class App:
             self.stop.set()
 
     def restart_stream(self):
+        self.write_log(f"Restarting the stream from {self.device.get() or 'no input'}")
         if self.running():
             self.restart = True
             self.stop_stream()
