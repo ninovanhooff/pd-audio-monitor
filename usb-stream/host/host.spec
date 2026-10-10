@@ -20,7 +20,7 @@ else:
                  info_plist={
                      "CFBundleName": name,
                      "CFBundleDisplayName": name,
-                     "CFBundleShortVersionString": "1.0",
+                     "CFBundleShortVersionString": "1.1",
                      "NSMicrophoneUsageDescription":
                          "PD Audio Monitor Host captures BlackHole, the virtual audio device your Mac plays into, "
                          "to stream it to the Playdate. macOS treats every audio input as a microphone.",
