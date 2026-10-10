@@ -22,9 +22,9 @@ Mac audio out → TRRS splitter → Playdate headset mic input → format emulat
 
 ## 2. Digital streaming from the Mac, built: `usb-stream/`
 
-The prototype is BlackHole, then `pdstream.py` (or PDStream.app), then serial `eval` commands, then
-a C receiver. The sender and receiver halves of the chain reproduce `chain_render` bit for bit (host
-tests), and every format plays on hardware.
+The prototype is BlackHole, then `pdstream.py` (or the PD Audio Monitor Host app), then serial
+`eval` commands, then a C receiver (PD Audio Monitor Receiver). The sender and receiver halves of
+the chain reproduce `chain_render` bit for bit (host tests), and every format plays on hardware.
 
 Mac captures audio → encodes in the target format → sends it to a receiver app → the receiver
 decodes and plays it.

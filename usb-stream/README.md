@@ -1,11 +1,11 @@
-# USB Stream
+# usb-stream: PD Audio Monitor Host and Receiver
 
 Plays Mac audio on the **Playdate's speaker** over the USB cable, encoded in a Playdate audio
 format. The signal stays digital end to end, so there's none of the analog noise of
 [`line-in-monitor`](../line-in-monitor/).
 
 ```
-DAW / any app ──► BlackHole 2ch ──► pdstream.py ──USB serial `eval`──────► USB Stream app ──► speaker
+DAW / any app ──► BlackHole 2ch ──► pdstream.py ──USB serial `eval`──────► receiver app ──► speaker
                   (virtual output)  decimate + encode                       decode + interpolate
 ```
 
@@ -36,18 +36,19 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
    make -C usb-stream/host bundle PYTHON=~/.venvs/pdstream/bin/python
    ```
 
-   Or build `usb-stream/host/dist/PDStream.app`, which does the same in a window, with status, the
-   log, and these setup and troubleshooting steps. Opened from Finder, it asks microphone access for
-   itself instead of for a terminal. Each build has a new signature, so after a rebuild you may
-   need to allow it again (see its Troubleshooting tab):
+   Or build the host app, `usb-stream/host/dist/PD Audio Monitor Host.app`, which does the same in
+   a window, with status, the log, and these setup and troubleshooting steps. Opened from Finder,
+   it asks microphone access for itself instead of for a terminal. Each build has a new signature,
+   so after a rebuild you may need to allow it again (see its Troubleshooting tab):
 
    ```bash
    make -C usb-stream/host app PYTHON=~/.venvs/pdstream/bin/python   # needs pyinstaller and Tk (brew install python-tk)
-   open usb-stream/host/dist/PDStream.app
+   open "usb-stream/host/dist/PD Audio Monitor Host.app"
    ```
 
-5. Build `USBStream.pdx` (`make -C usb-stream/receiver`, with `PLAYDATE_SDK_PATH` set) and
-   sideload it. Start it on the Playdate, which stays connected over USB.
+5. Build the receiver, `PDAudioMonitorReceiver.pdx` (`make -C usb-stream/receiver`, with
+   `PLAYDATE_SDK_PATH` set), and sideload it. Start it on the Playdate, which stays connected over
+   USB.
 6. Run the streamer:
 
    ```bash
@@ -66,7 +67,7 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 
 | Row | Shows |
 | --- | --- |
-| Format ✛ | Format of the incoming stream. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM); the Playdate asks `pdstream.py` to switch and shows `...` until it does. Both wrap around. `--format` sets the starting format, and the PDStream window's Format menu switches it too |
+| Format ✛ | Format of the incoming stream. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM); the Playdate asks `pdstream.py` to switch and shows `...` until it does. Both wrap around. `--format` sets the starting format, and the host app's Format menu switches it too |
 | Output Ⓑ | Speaker / headphones / both |
 | Link | `eval` packets and bytes arriving per second |
 | Buffer | Audio queued. Playback starts at 150 ms; above 400 ms it drops back to 150 ms (clock drift). |

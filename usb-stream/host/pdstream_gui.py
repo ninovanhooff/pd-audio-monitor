@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""PDStream: pdstream.py in a window, with status, the log, and setup steps.
+"""PD Audio Monitor Host: pdstream.py in a window, with status, the log, and setup steps.
 
-Built as PDStream.app (`make app`), macOS asks microphone access for PDStream itself rather than for
-a terminal.
+Built as "PD Audio Monitor Host.app" (`make app`), macOS asks microphone access for the app itself
+rather than for a terminal.
 """
 import queue
 import subprocess
@@ -20,32 +20,32 @@ BLACKHOLE_URL = "https://existential.audio/blackhole/"
 LOG_LINES = 2000
 
 SETUP = [
-    ("Install BlackHole 2ch", "A virtual audio device: what plays into it, PDStream captures. "
+    ("Install BlackHole 2ch", "A virtual audio device: what plays into it, the host app captures. "
      "Download it, or run `brew install blackhole-2ch`.", [("BlackHole website", lambda: webbrowser.open(BLACKHOLE_URL))]),
     ("Set BlackHole 2ch to 44.1 kHz", "In Audio MIDI Setup. To hear the Mac too, create a Multi-Output Device "
      "there with BlackHole and your headphones; the Playdate plays a few hundred ms later.",
      [("Audio MIDI Setup", lambda: subprocess.run(["open", "-a", "Audio MIDI Setup"]))]),
     ("Send audio to BlackHole", "Pick BlackHole (or the Multi-Output Device) as the Mac's sound output, "
      "or as your DAW's output device.", [("Sound settings", lambda: subprocess.run(["open", SOUND_SETTINGS]))]),
-    ("Start USB Stream on the Playdate", "Install USBStream.pdx, start it, and keep the Playdate connected over "
-     "USB and unlocked.", []),
-    ("Allow microphone access", "macOS asks when PDStream first captures: that is how it lets PDStream hear "
+    ("Start PD Audio Monitor Receiver on the Playdate", "Install PDAudioMonitorReceiver.pdx, start it, "
+     "and keep the Playdate connected over USB and unlocked.", []),
+    ("Allow microphone access", "macOS asks when the host app first captures: that is how it lets it hear "
      "BlackHole. Nothing is recorded from a microphone.",
      [("Microphone settings", lambda: subprocess.run(["open", MICROPHONE_SETTINGS]))]),
 ]
 
 TROUBLESHOOTING = [
     ("Peak stays at -99 dBFS", "Nothing reaches BlackHole: check the Mac's (or the DAW's) output device. "
-     "If the microphone row isn't \"Authorized\", allow PDStream in Microphone settings, then press Reopen "
-     "PDStream: macOS applies the change only to a new launch."),
+     "If the microphone row isn't \"Authorized\", allow PD Audio Monitor Host in Microphone settings, then "
+     "press Reopen: macOS applies the change only to a new launch."),
     ("Microphone access lost after rebuilding", "macOS ties the permission to the app's signature, which "
-     "changes with each build. Remove PDStream from the Microphone list (or run `tccutil reset Microphone "
-     "nl.ninovanhooff.pdstream`), then reopen it and allow access again."),
+     "changes with each build. Remove PD Audio Monitor Host from the Microphone list (or run "
+     "`tccutil reset Microphone nl.ninovanhooff.pdstream`), then reopen it and allow access again."),
     ("Waiting for a Playdate", "Plug it in and unlock it. Quit the Playdate Simulator: it also holds the "
      "Playdate's serial port."),
     ("Falling behind, or dropouts", "The USB link is slower than the format needs: pick a lighter one."),
-    ("\"PDStream can't be opened\"", "macOS blocks unsigned apps that were downloaded: right-click it, "
-     "choose Open, or allow it under System Settings → Privacy & Security."),
+    ("\"PD Audio Monitor Host can't be opened\"", "macOS blocks unsigned apps that were downloaded: "
+     "right-click it, choose Open, or allow it under System Settings → Privacy & Security."),
 ]
 
 
@@ -74,7 +74,7 @@ class App:
         self.worker = self.stop = self.sink = self.codec = None
         self.restart = False
 
-        root.title("PDStream")
+        root.title("PD Audio Monitor Host")
         root.geometry("760x600")
         root.minsize(560, 420)
         main = ttk.Frame(root, padding=12)
@@ -91,7 +91,7 @@ class App:
         ttk.Button(status, text="Microphone settings",
                    command=lambda: subprocess.run(["open", MICROPHONE_SETTINGS])).grid(row=1, column=2, sticky="e")
         # macOS applies access changed in Settings only to a new process.
-        self.reopen = ttk.Button(status, text="Reopen PDStream", command=self.reopen_app)
+        self.reopen = ttk.Button(status, text="Reopen", command=self.reopen_app)
         self.reopen.grid(row=1, column=3, sticky="e", padx=(4, 0))
 
         controls = ttk.Frame(main, padding=(0, 10))
@@ -231,7 +231,7 @@ class App:
         self.rows["Microphone"].configure(text={
             None: "-", "authorized": "Authorized",
             "not determined": "Not asked yet: macOS asks when the capture starts",
-            "denied": f"Denied: allow {pdstream.microphone_app()} in Microphone settings, then reopen PDStream",
+            "denied": f"Denied: allow {pdstream.microphone_app()} in Microphone settings, then reopen this app",
             "restricted": "Restricted by a profile or parental controls"}[access])
         if access in (None, "authorized"):
             self.reopen.grid_remove()
@@ -240,7 +240,7 @@ class App:
 
         port = self.sink.port if self.sink and self.running() else None
         self.rows["Playdate"].configure(text=f"Connected on {port.port}" if port else "-" if not self.running() else
-                                        "Waiting: plug it in over USB, unlock it, and start USB Stream")
+                                        "Waiting: plug it in over USB, unlock it, and start PD Audio Monitor Receiver")
         if self.codec and self.running() and self.format.current() != self.codec.format:
             self.format.current(self.codec.format)
         self.root.after(250, self.poll)

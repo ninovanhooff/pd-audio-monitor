@@ -295,7 +295,7 @@ static int update(void* userdata) {
     updateRates();
 
     pd->graphics->clear(kColorWhite);
-    drawString(fonts.label, "USB stream", 12, 8);
+    drawString(fonts.label, "PD Audio Monitor Receiver", 12, 8);
     if (ui.wantedFormat >= 0 && ui.wantedFormat != receiver.format) {
         drawRow(40, "Format", "✛", "%s ...", chain_formats[ui.wantedFormat].name);
     } else {
@@ -308,7 +308,7 @@ static int update(void* userdata) {
     drawMeter(142);
     drawRow(166, "Dropouts", "", "%d lost, %d under, %d over", (int)receiver.lost, (int)underruns, (int)overruns);
     drawString(fonts.value, "Mac: route audio to BlackHole and run", 12, 196);
-    drawString(fonts.value, "usb-stream/host/pdstream.py", 12, 214);
+    drawString(fonts.value, "PD Audio Monitor Host", 12, 214);
     return 1;
 }
 

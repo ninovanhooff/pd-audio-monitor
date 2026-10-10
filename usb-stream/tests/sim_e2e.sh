@@ -2,11 +2,11 @@
 # Headless Linux check of the receiver app: pdstream.py records eval commands for a test signal, the
 # Simulator replays them through the receiver (replay.bin in the app's data folder), and what it
 # plays must match chain_render. The Simulator has no serial input, so USB itself isn't covered.
-# Needs: PLAYDATE_SDK_PATH, a built usb-stream/receiver/USBStream.pdx, Xvfb, xdotool, ImageMagick
-# (import), pulseaudio + pactl + parec, ffmpeg, python3 with numpy.
+# Needs: PLAYDATE_SDK_PATH, a built usb-stream/receiver/PDAudioMonitorReceiver.pdx, Xvfb, xdotool,
+# ImageMagick (import), pulseaudio + pactl + parec, ffmpeg, python3 with numpy.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
-pdx="$here/../receiver/USBStream.pdx"
+pdx="$here/../receiver/PDAudioMonitorReceiver.pdx"
 sdk="${PLAYDATE_SDK_PATH:?set PLAYDATE_SDK_PATH}"
 work="${TMPDIR:-/tmp}/usb-stream-e2e"
 data="$sdk/Disk/Data/nl.ninovanhooff.usbstream"

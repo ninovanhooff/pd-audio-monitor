@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream Mac audio (BlackHole, or a WAV file) to the USB Stream app on a Playdate.
+"""Stream Mac audio (BlackHole, or a WAV file) to PD Audio Monitor Receiver on a Playdate.
 
 Encodes in a Playdate audio format with shared/codec (built into libpdstream by `make`) and sends
 it over USB serial as `eval` commands: Lua bytecode that hands each packet to the receiver, which
@@ -307,8 +307,10 @@ def stream_file(path, codec, sink, stats, names, paced):
 
 
 def microphone_app():
-    """The app macOS asks microphone access for: PDStream.app itself, else whatever started this."""
-    return "PDStream" if ".app/Contents/" in sys.executable else "the app running this (Terminal, iTerm, ...)"
+    """The app macOS asks microphone access for: "PD Audio Monitor Host.app" itself, else whatever started this."""
+    if ".app/Contents/" in sys.executable:
+        return "PD Audio Monitor Host"
+    return "the app running this (Terminal, iTerm, ...)"
 
 
 class _Block(ctypes.Structure):

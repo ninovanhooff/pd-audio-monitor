@@ -1,7 +1,7 @@
 HEAP_SIZE      = 8388208
 STACK_SIZE     = 61800
 
-PRODUCT = USBStream.pdx
+PRODUCT = PDAudioMonitorReceiver.pdx
 
 SDK = ${PLAYDATE_SDK_PATH}
 ifeq ($(SDK),)
