@@ -13,13 +13,14 @@ static struct {
     LCDFont* glyph;
 } fonts;
 
-// Single producer (serial messages, on the main thread), single consumer (source callback): only the
+// Single producer (pdstream_feed, on the main thread), single consumer (source callback): only the
 // producer moves writePos and only the consumer moves readPos, so the ring needs no lock.
 #define RING_SIZE 32768
 #define RING_MASK (RING_SIZE - 1)
 #define PRIME_FILL 6615 // 150 ms
 #define MAX_FILL 17640  // 400 ms: beyond it the Mac's clock has run ahead, so drop back to PRIME_FILL
 #define REPLAY_FILL 8820
+#define REPLAY_MAX_COMMAND 2048
 
 static volatile int16_t ring[RING_SIZE];
 static volatile uint32_t writePos;
@@ -29,7 +30,7 @@ static volatile uint32_t underruns;
 static volatile uint32_t overruns;
 
 static PacketReceiver receiver;
-// Test hook: packets that pdstream.py --out recorded, fed in as fast as they play.
+// Test hook: `eval` commands that pdstream.py --out recorded, fed in as fast as they play.
 static SDFile* replay;
 
 typedef enum { OUTPUT_SPEAKER, OUTPUT_HEADPHONES, OUTPUT_BOTH, OUTPUT_COUNT } Output;
@@ -37,7 +38,6 @@ static const char* outputNames[] = {"speaker", "headphones", "speaker + headphon
 
 static struct {
     Output output;
-    int viaEval;
     int wantedFormat;
     unsigned int lastRequestMs;
     int peak;
@@ -67,12 +67,9 @@ static void emitSamples(void* context, const int16_t* samples, int count) {
     }
 }
 
-static void receive(const char* text) {
-    if (strncmp(text, "msg ", 4) == 0) text += 4;
-    if (packet_receive(&receiver, text, emitSamples, NULL)) {
+static void receive(const uint8_t* packet, int length) {
+    if (packet_receive(&receiver, packet, length, emitSamples, NULL))
         ui.lastPacketMs = pd->system->getCurrentTimeMilliseconds();
-        ui.viaEval = 0;
-    }
 }
 
 // pdstream_feed(packet): what the host's `eval` bytecode calls, with the packet as a raw string.
@@ -80,10 +77,7 @@ static int feed(lua_State* L) {
     (void)L;
     size_t length = 0;
     const uint8_t* packet = (const uint8_t*)pd->lua->getArgBytes(1, &length);
-    if (packet && packet_receive_bytes(&receiver, packet, (int)length, emitSamples, NULL)) {
-        ui.lastPacketMs = pd->system->getCurrentTimeMilliseconds();
-        ui.viaEval = 1;
-    }
+    if (packet) receive(packet, (int)length);
     return 0;
 }
 
@@ -120,13 +114,25 @@ static int sourceCallback(void* context, int16_t* left, int16_t* right, int len)
     return 1;
 }
 
+// The Simulator has no serial input: replay holds `eval <length>\n<bytecode>` commands, whose
+// packets go in without running the bytecode.
 static void feedReplay(void) {
-    static char buffer[1024];
+    static uint8_t buffer[REPLAY_MAX_COMMAND];
     static int length;
     while (replay && writePos - readPos < REPLAY_FILL) {
-        char* end = memchr(buffer, '\n', (size_t)length);
-        if (!end) {
-            int read = length < (int)sizeof(buffer) ? pd->file->read(replay, buffer + length, sizeof(buffer) - (unsigned)length) : 0;
+        const uint8_t* newline = memchr(buffer, '\n', (size_t)length);
+        int header = newline ? (int)(newline + 1 - buffer) : 0;
+        int size = header > 5 && memcmp(buffer, "eval ", 5) == 0 ? 0 : -1;
+        for (int i = 5; size >= 0 && i < header - 1; i++)
+            size = buffer[i] >= '0' && buffer[i] <= '9' && size < REPLAY_MAX_COMMAND ? size * 10 + buffer[i] - '0' : -1;
+        if (header && (size <= 0 || header + size > REPLAY_MAX_COMMAND)) {
+            pd->system->logToConsole("replay: not an eval command");
+            pd->file->close(replay);
+            replay = NULL;
+            return;
+        }
+        if (!header || length < header + size) {
+            int read = pd->file->read(replay, buffer + length, (unsigned)(REPLAY_MAX_COMMAND - length));
             if (read <= 0) {
                 pd->file->close(replay);
                 replay = NULL;
@@ -135,10 +141,11 @@ static void feedReplay(void) {
             length += read;
             continue;
         }
-        *end = 0;
-        receive(buffer);
-        length -= (int)(end + 1 - buffer);
-        memmove(buffer, end + 1, (size_t)length);
+        const uint8_t* packet;
+        int packetLength = packet_from_eval(buffer + header, size, &packet);
+        if (packetLength >= 0) receive(packet, packetLength);
+        length -= header + size;
+        memmove(buffer, buffer + header + size, (size_t)length);
     }
 }
 
@@ -176,29 +183,16 @@ static int codecRank(int format) {
     return codec == CODEC_PCM16 ? 2 : codec == CODEC_PCM8 ? 1 : 0;
 }
 
-// Over msg, 44.1 kHz lacks 16-bit (the bypass): a rate step lands on the nearest codec that rate
-// has, and a codec step goes to the next one it has. Both wrap around.
+// Both wrap around.
 static void stepFormat(int rateStep, int codecStep) {
     int current = ui.wantedFormat >= 0 ? ui.wantedFormat : receiver.format >= 0 ? receiver.format : chain_default_format;
-    int rate = (rateRank(current) + rateStep + 3) % 3, codec = codecRank(current);
-    int best = -1, bestDistance = 0;
+    int rate = (rateRank(current) + rateStep + 3) % 3, codec = (codecRank(current) + codecStep + 3) % 3;
     for (int format = 0; format < chain_format_count; format++) {
-        if ((format == PACKET_UNSTREAMABLE_FORMAT && !ui.viaEval) || rateRank(format) != rate) continue;
-        int distance = codecRank(format) - codec;
-        if (codecStep) {
-            distance *= codecStep;
-            if (distance <= 0) distance += 3;
-        } else {
-            distance = distance < 0 ? -distance * 2 : distance * 2 + 1; // on a tie, the lighter codec
-        }
-        if (best < 0 || distance < bestDistance) {
-            best = format;
-            bestDistance = distance;
+        if (rateRank(format) == rate && codecRank(format) == codec) {
+            ui.wantedFormat = format;
+            ui.lastRequestMs = pd->system->getCurrentTimeMilliseconds() - 1000;
         }
     }
-    if (best < 0) return;
-    ui.wantedFormat = best;
-    ui.lastRequestMs = pd->system->getCurrentTimeMilliseconds() - 1000;
 }
 
 static void handleInput(void) {
@@ -307,7 +301,7 @@ static int update(void* userdata) {
     }
     drawRow(64, "Output", "Ⓑ", "%s", outputNames[ui.output]);
     int kbTenths = ui.bytesPerSecond / 100;
-    drawRow(88, "Link", "", "%d %s/s, %d.%d KB/s", ui.packetsPerSecond, ui.viaEval ? "eval" : "msg", kbTenths / 10, kbTenths % 10);
+    drawRow(88, "Link", "", "%d eval/s, %d.%d KB/s", ui.packetsPerSecond, kbTenths / 10, kbTenths % 10);
     drawRow(112, "Buffer", "", "%d ms", (int)((writePos - readPos) / 44));
     drawMeter(142);
     drawRow(166, "Dropouts", "", "%d lost, %d under, %d over", (int)receiver.lost, (int)underruns, (int)overruns);
@@ -353,8 +347,7 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     pd->sound->getHeadphoneState(NULL, NULL, headphoneChanged);
     applyOutput();
     pd->sound->addSource(sourceCallback, NULL, 0);
-    pd->system->setSerialMessageCallback(receive);
-    replay = pd->file->open("replay.txt", kFileReadData);
+    replay = pd->file->open("replay.bin", kFileReadData);
 
     pd->system->setUpdateCallback(update, NULL);
     return 0;

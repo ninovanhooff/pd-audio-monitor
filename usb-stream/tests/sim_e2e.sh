@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Headless Linux check of the receiver app: pdstream.py records msg lines for a test signal, the
-# Simulator replays them through the receiver (replay.txt in the app's data folder), and what it
+# Headless Linux check of the receiver app: pdstream.py records eval commands for a test signal, the
+# Simulator replays them through the receiver (replay.bin in the app's data folder), and what it
 # plays must match chain_render. The Simulator has no serial input, so USB itself isn't covered.
 # Needs: PLAYDATE_SDK_PATH, a built usb-stream/receiver/USBStream.pdx, Xvfb, xdotool, ImageMagick
 # (import), pulseaudio + pactl + parec, ffmpeg, python3 with numpy.
@@ -27,10 +27,10 @@ pactl set-default-sink out
 ffmpeg -v error -y -f lavfi -i "aevalsrc='0.25*sin(2*PI*(200+200*t)*t)':s=44100:d=8" -c:a pcm_s16le "$work/input.wav"
 ffmpeg -v error -y -i "$work/input.wav" -f s16le "$work/input.raw"
 
-# run <format>: replays the format's lines, records the output and a screenshot.
+# run <format>: replays the format's commands, records the output and a screenshot.
 run() {
     local format=$1
-    python3 "$here/../host/pdstream.py" --format "$format" --input "$work/input.wav" --out "$data/replay.txt"
+    python3 "$here/../host/pdstream.py" --format "$format" --input "$work/input.wav" --out "$data/replay.bin"
     "$work/chain_render" "$format" < "$work/input.raw" > "$work/ref$format.raw"
     Xvfb :97 -screen 0 1024x768x24 >/dev/null 2>&1 & local xvfb=$!
     export DISPLAY=:97
@@ -48,7 +48,7 @@ run() {
 
 run 5
 run 7
-rm -f "$data/replay.txt"
+rm -f "$data/replay.bin"
 
 python3 - "$work" <<'PY'
 import sys, numpy as np

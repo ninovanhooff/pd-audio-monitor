@@ -5,7 +5,7 @@ format. The signal stays digital end to end, so there's none of the analog noise
 [`line-in-monitor`](../line-in-monitor/).
 
 ```
-DAW / any app ──► BlackHole 2ch ──► pdstream.py ──USB serial `msg`/`eval`──► USB Stream app ──► speaker
+DAW / any app ──► BlackHole 2ch ──► pdstream.py ──USB serial `eval`──────► USB Stream app ──► speaker
                   (virtual output)  decimate + encode                       decode + interpolate
 ```
 
@@ -52,7 +52,7 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 
    ```bash
    ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py          # default 22.05 kHz IMA ADPCM
-   ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py --help   # formats, --link, --device, --port, --input file.wav
+   ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py --help   # formats, --device, --port, --input file.wav
    ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py --format 0             # bypass
    usb-stream/host/dist/pdstream                                     # the bundle takes the same options
    ```
@@ -66,44 +66,37 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 
 | Row | Shows |
 | --- | --- |
-| Format ✛ | Format of the incoming stream. The bypass is only offered while the stream arrives over `eval`. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM); the Playdate asks `pdstream.py` to switch and shows `...` until it does. Both wrap around; over `msg`, 44.1 kHz without the bypass gets 8-bit. `--format` sets the starting format |
+| Format ✛ | Format of the incoming stream. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM); the Playdate asks `pdstream.py` to switch and shows `...` until it does. Both wrap around. `--format` sets the starting format |
 | Output Ⓑ | Speaker / headphones / both |
-| Link | Packets per second, which link they come over, and bytes per second arriving |
+| Link | `eval` packets and bytes arriving per second |
 | Buffer | Audio queued. Playback starts at 150 ms; above 400 ms it drops back to 150 ms (clock drift). |
 | meter | Peak level, or `CLIP` when the stream hits full scale |
-| Dropouts | Lost messages (sequence gaps), buffer underruns and overruns |
+| Dropouts | Lost packets (sequence gaps), buffer underruns and overruns |
 
 ## Formats and link load
 
-| # | Format | `msg`/s | `eval`/s | KB/s on the wire (`msg`, `eval`) |
-| --- | --- | --- | --- | --- |
-| 0 | 44.1 kHz 16-bit (bypass): `eval` only | 493 | 87 | 120, 96 |
-| 1 | 44.1 kHz 8-bit | 247 | 44 | 60, 48 |
-| 2 | 44.1 kHz IMA ADPCM | 122 | 22 | 30, 24 |
-| 3 | 22.05 kHz 16-bit | 247 | 44 | 60, 48 |
-| 4 | 22.05 kHz 8-bit | 123 | 22 | 30, 24 |
-| **5** | **22.05 kHz IMA ADPCM** (default) | **62** | **11** | **15, 12** |
-| 6 | 11.025 kHz 16-bit | 123 | 22 | 31, 24 |
-| 7 | 11.025 kHz 8-bit | 62 | 11 | 15, 12 |
-| 8 | 11.025 kHz IMA ADPCM | 31 | 6 | 7.6, 6.1 |
+| # | Format | `eval`/s | KB/s on the wire |
+| --- | --- | --- | --- |
+| 0 | 44.1 kHz 16-bit (bypass) | 87 | 96 |
+| 1 | 44.1 kHz 8-bit | 44 | 48 |
+| 2 | 44.1 kHz IMA ADPCM | 22 | 24 |
+| 3 | 22.05 kHz 16-bit | 44 | 48 |
+| 4 | 22.05 kHz 8-bit | 22 | 24 |
+| **5** | **22.05 kHz IMA ADPCM** (default) | **11** | **12** |
+| 6 | 11.025 kHz 16-bit | 22 | 24 |
+| 7 | 11.025 kHz 8-bit | 11 | 12 |
+| 8 | 11.025 kHz IMA ADPCM | 6 | 6.1 |
 
-A Playdate takes about 390 `msg` lines a second (measured with the bypass format), so over `msg` the
-bypass can't be streamed: `pdstream.py` refuses it and the d-pad skips it. The other formats play
-on a Playdate over `msg`, and the bypass plays over `eval` (86 `eval`/s measured).
+A Playdate takes about 86 `eval`s a second (measured with the bypass), so every format plays.
 
 ## Protocol
 
-`pdstream.py --link` picks how packets travel:
-
-- `msg`: each line is `msg <base64>\n`. A message's text can't carry raw bytes and is
-  capped at about 251 characters, so each packet is at most 183 bytes, which is 244 base64
-  characters.
-- `eval` (default): each packet is 1024 raw bytes inside `eval <length>\n<Lua bytecode>`. The bytecode is a
-  call `pdstream_feed("<packet>")`, built around the packet from a template that equals pdc's output
-  (`EVAL_HEAD` in `pdstream.py`; the tests compare it with pdc). The receiver's empty `main.lua`
-  starts the Lua runtime that `eval` runs in; C registers `pdstream_feed` and sets its update
-  callback once that runtime is up (`kEventInitLua`). `eval` doesn't work in
-  apps from Catalog.
+Each packet is up to 1024 raw bytes inside `eval <length>\n<Lua bytecode>`. The bytecode is a call
+`pdstream_feed("<packet>")`, built around the packet from a template that equals pdc's output
+(`EVAL_HEAD` in `pdstream.py`; the tests compare it with pdc). The receiver's empty `main.lua`
+starts the Lua runtime that `eval` runs in; C registers `pdstream_feed` and sets its update callback
+once that runtime is up (`kEventInitLua`). `eval` doesn't work in apps from Catalog, so the receiver
+has to be sideloaded.
 
 `pdstream.py` sends `echo off` when it opens the port. A packet holds:
 
@@ -121,17 +114,17 @@ sequence numbers running.
 After a gap in the sequence numbers, the receiver skips to the next unit boundary and goes on.
 For ADPCM that is the next block. A new format number restarts the decoder.
 
-Why C: Lua can't feed PCM to the audio engine, so even `eval` packets go straight to a C function.
+Why C: Lua can't feed PCM to the audio engine, so the `eval` packets go straight to a C function.
 
 ## Test
 
-- `tests/run_tests.sh`: on the host, `pdstream.py` writes both links' output for a test signal and
-  the receiver's `packet.c` decodes them. Every format must equal `chain_render` bit for bit, `msg`
-  lines must stay within the device limit, decoding must recover after two dropped packets, and,
-  with pdc on the PATH, the `eval` bytecode must equal pdc's.
+- `tests/run_tests.sh`: on the host, `pdstream.py` writes its `eval` commands for a test signal and
+  the receiver's `packet.c` decodes them. Every format must equal `chain_render` bit for bit,
+  decoding must recover after two dropped packets, and, with pdc on the PATH, the bytecode must
+  equal pdc's.
 - `tests/sim_e2e.sh` (headless Linux): the Simulator has no serial input, so the receiver replays
-  recorded lines from `replay.txt` in its data folder. The check records its output and compares
-  it with `chain_render` (−82 dB residual).
+  recorded commands from `replay.bin` in its data folder, taking the packets out of the bytecode.
+  The check records its output and compares it with `chain_render` (−82 dB residual).
 
 ## Not yet verified
 

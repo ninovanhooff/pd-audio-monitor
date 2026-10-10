@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Host checks: pdstream.py's output over both links, decoded by the receiver's own packet code, must
-# equal chain_render's output for every format, and the receiver must recover from lost messages.
-# With pdc on the PATH, the eval link's bytecode must equal pdc's.
+# Host checks: pdstream.py's eval commands, decoded by the receiver's own packet code, must equal
+# chain_render's output for every format, and the receiver must recover from lost packets. With pdc
+# on the PATH, the eval bytecode must equal pdc's.
 # Needs: cc, ffmpeg, python3 with numpy.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -10,7 +10,7 @@ build="$here/build"
 mkdir -p "$build"
 flags="-std=c11 -O2 -Wall -Wextra -Werror -I$codec -I$here/../receiver/src"
 make -s -C "$here/../host"
-cc $flags -o "$build/receive_lines" "$here/receive_lines.c" "$here/../receiver/src/packet.c" \
+cc $flags -o "$build/receive_commands" "$here/receive_commands.c" "$here/../receiver/src/packet.c" \
     "$codec/format_stream.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" -lm
 cc $flags -o "$build/chain_render" "$codec/tests/chain_render.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" -lm
 
@@ -36,7 +36,7 @@ def commands(data):
     out = []
     while data:
         match = re.match(rb"eval (\d+)\n", data)
-        end = match.end() + int(match.group(1)) if match else data.index(b"\n") + 1
+        end = match.end() + int(match.group(1))
         out.append(data[:end])
         data = data[end:]
     return out
@@ -51,8 +51,8 @@ def pdc_chunk(packet_text):
     name_end = pdz.index(b"\0", 20)
     return zlib.decompress(pdz[((name_end + 4) & ~3) + 4:])
 
-def receive(lines):
-    run = subprocess.run([f"{build}/receive_lines"], input=b"".join(lines), capture_output=True, check=True)
+def receive(commands):
+    run = subprocess.run([f"{build}/receive_commands"], input=b"".join(commands), capture_output=True, check=True)
     return np.frombuffer(run.stdout, "<i2"), run.stderr.decode().strip()
 
 # pdstream mixes stereo to mono as (left + right) // 2; ffmpeg's -ac 1 averages with rounding, so
@@ -62,37 +62,33 @@ with wave.open(f"{build}/input.wav") as wav:
 mono = (stereo.sum(axis=1) // 2).astype("<i2")
 
 if shutil.which("pdc"):
-    for length in (1, 40, 41, 300, pdstream.EVAL_PACKET_BYTES):
+    for length in (1, 40, 41, 300, pdstream.PACKET_BYTES):
         text = "".join(chr(48 + i % 10) for i in range(length))
         command = pdstream.eval_command(text.encode())
         check(f"eval bytecode for {length} bytes equals pdc's", command.split(b"\n", 1)[1] == pdc_chunk(text), "")
 else:
     print("SKIP eval bytecode against pdc (pdc not on the PATH)")
 
-for link, fmt in [(link, fmt) for link in pdstream.LINKS for fmt in range(len(divisors))]:
-    divisor = divisors[fmt]
-    name = f"{link} format {fmt}"
-    lines_path = f"{build}/{link}{fmt}.txt"
-    subprocess.run([sys.executable, f"{here}/../host/pdstream.py", "--format", str(fmt), "--link", link,
-                    "--input", f"{build}/input.wav", "--out", lines_path], check=True)
-    lines = commands(open(lines_path, "rb").read())
-    if link == "msg":
-        longest = max(len(line) - 1 for line in lines)
-        check(f"{name}: lines fit a device msg", longest <= 248, f"{len(lines)} lines, longest {longest} chars")
+for fmt, divisor in enumerate(divisors):
+    name = f"format {fmt}"
+    path = f"{build}/format{fmt}.bin"
+    subprocess.run([sys.executable, f"{here}/../host/pdstream.py", "--format", str(fmt),
+                    "--input", f"{build}/input.wav", "--out", path], check=True)
+    sent = commands(open(path, "rb").read())
 
     ref = np.frombuffer(subprocess.run([f"{build}/chain_render", str(fmt)], input=mono.tobytes(),
                                        capture_output=True, check=True).stdout, "<i2")
-    out, counts = receive(lines)
+    out, counts = receive(sent)
     delay = divisor - 1
     n = min(len(out), len(ref) - delay)
     check(f"{name}: received audio equals chain_render", n > 44100 * 2.9 and
           np.array_equal(out[:n], ref[delay:delay + n]), f"{n} samples, {counts}")
 
-    # Drop two messages mid-stream: the receiver counts them and resumes at the next unit, after
+    # Drop two packets mid-stream: the receiver counts them and resumes at the next unit, after
     # which its output equals the loss-free decode checked above.
-    dropped, counts = receive(lines[:len(lines) // 4] + lines[len(lines) // 4 + 2:])
+    dropped, counts = receive(sent[:len(sent) // 4] + sent[len(sent) // 4 + 2:])
     tail = 20000
     ok = "lost 2" in counts and len(dropped) > tail and np.array_equal(dropped[-tail:], out[-tail:])
-    check(f"{name}: recovers from 2 lost messages", ok, f"{counts}, {len(out) - len(dropped)} samples skipped")
+    check(f"{name}: recovers from 2 lost packets", ok, f"{counts}, {len(out) - len(dropped)} samples skipped")
 sys.exit(1 if failed else 0)
 PY

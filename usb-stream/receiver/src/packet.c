@@ -1,55 +1,13 @@
 #include "packet.h"
 
-static int base64_value(char c) {
-    if (c >= 'A' && c <= 'Z') return c - 'A';
-    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-    if (c >= '0' && c <= '9') return c - '0' + 52;
-    if (c == '+') return 62;
-    if (c == '/') return 63;
-    return -1;
-}
-
-static int base64_decode(const char* text, uint8_t* out, int capacity) {
-    uint32_t bits = 0;
-    int count = 0, written = 0;
-    for (; *text && *text != '='; text++) {
-        int value = base64_value(*text);
-        if (value < 0) {
-            if (*text == '\r' || *text == '\n' || *text == ' ') continue;
-            return -1;
-        }
-        bits = bits << 6 | (uint32_t)value;
-        if (++count == 4) {
-            if (written + 3 > capacity) return -1;
-            out[written++] = (uint8_t)(bits >> 16);
-            out[written++] = (uint8_t)(bits >> 8);
-            out[written++] = (uint8_t)bits;
-            bits = 0;
-            count = 0;
-        }
-    }
-    if (count == 1) return -1;
-    if (count > 1) {
-        bits <<= 6 * (4 - count);
-        if (written + count - 1 > capacity) return -1;
-        out[written++] = (uint8_t)(bits >> 16);
-        if (count == 3) out[written++] = (uint8_t)(bits >> 8);
-    }
-    return written;
-}
+#include <string.h>
 
 void packet_init(PacketReceiver* receiver) {
     receiver->format = -1;
     receiver->packets = receiver->bytes = receiver->lost = 0;
 }
 
-int packet_receive(PacketReceiver* receiver, const char* text, PacketEmit emit, void* context) {
-    uint8_t packet[PACKET_MAX_BYTES];
-    int length = base64_decode(text, packet, PACKET_MAX_BYTES);
-    return packet_receive_bytes(receiver, packet, length, emit, context);
-}
-
-int packet_receive_bytes(PacketReceiver* receiver, const uint8_t* packet, int length, PacketEmit emit, void* context) {
+int packet_receive(PacketReceiver* receiver, const uint8_t* packet, int length, PacketEmit emit, void* context) {
     if (length < PACKET_HEADER_BYTES || packet[0] >= chain_format_count) return 0;
 
     const ChainFormat* format = &chain_formats[packet[0]];
@@ -79,4 +37,26 @@ int packet_receive_bytes(PacketReceiver* receiver, const uint8_t* packet, int le
         if (count > 0) emit(context, receiver->output, count);
     }
     return 1;
+}
+
+// The packet is the chunk's last string constant (EVAL_HEAD in pdstream.py), followed by a fixed
+// 9-byte tail. Before it: a string tag, then its length plus one as a Lua dump size.
+int packet_from_eval(const uint8_t* chunk, int length, const uint8_t** packet) {
+    static const uint8_t tail[] = {0x81, 0x01, 0x00, 0x00, 0x80, 0x80, 0x80, 0x80, 0x80};
+    static const char name[] = "pdstream_feed";
+    const int nameLength = (int)sizeof(name) - 1, tailLength = (int)sizeof(tail);
+    if (length < tailLength) return -1;
+    const uint8_t* at = NULL;
+    for (int i = 0; i + nameLength <= length && !at; i++)
+        if (memcmp(chunk + i, name, (size_t)nameLength) == 0) at = chunk + i + nameLength;
+    const uint8_t* end = chunk + length - tailLength;
+    if (!at || memcmp(end, tail, (size_t)tailLength) != 0) return -1;
+    if (at >= end || (*at != 0x04 && *at != 0x14)) return -1;
+    at++;
+    int size = 0;
+    while (at < end && !(*at & 0x80)) size = size << 7 | *at++;
+    if (at >= end) return -1;
+    size = size << 7 | (*at++ & 0x7F);
+    *packet = at;
+    return at + size - 1 == end ? size - 1 : -1;
 }

@@ -43,8 +43,7 @@ TROUBLESHOOTING = [
      "nl.ninovanhooff.pdstream`), then reopen it and allow access again."),
     ("Waiting for a Playdate", "Plug it in and unlock it. Quit the Playdate Simulator: it also holds the "
      "Playdate's serial port."),
-    ("Falling behind, or dropouts", "The link is slower than the format needs. The bypass "
-     "(44.1 kHz 16-bit) needs the eval link."),
+    ("Falling behind, or dropouts", "The USB link is slower than the format needs: pick a lighter one."),
     ("\"PDStream can't be opened\"", "macOS blocks unsigned apps that were downloaded: right-click it, "
      "choose Open, or allow it under System Settings → Privacy & Security."),
 ]
@@ -107,11 +106,6 @@ class App:
         self.format.current(self.lib.pdstream_default_format())
         self.format.pack(side="left", padx=(4, 12))
         self.format.bind("<<ComboboxSelected>>", lambda event: self.pick_format())
-        ttk.Label(controls, text="Link").pack(side="left")
-        self.link = tk.StringVar(value="eval")
-        for link in pdstream.LINKS:
-            ttk.Radiobutton(controls, text=link, value=link, variable=self.link,
-                            command=self.restart_stream).pack(side="left", padx=2)
         self.toggle = ttk.Button(controls, text="Stop", command=self.toggle_stream)
         self.toggle.pack(side="right")
         ttk.Button(controls, text="↻", width=2, command=self.list_devices).pack(side="right", padx=4)
@@ -165,13 +159,10 @@ class App:
 
     def start_stream(self):
         fmt = self.format.current()
-        if fmt == pdstream.UNSTREAMABLE_FORMAT and self.link.get() == "msg":
-            self.write_log(f"{self.formats[fmt]} needs the eval link; picking eval.")
-            self.link.set("eval")
         self.stop = threading.Event()
-        self.codec = pdstream.Codec(self.lib, fmt, self.link.get())
+        self.codec = pdstream.Codec(self.lib, fmt)
         self.sink = pdstream.SerialSink(None, verbose=True)
-        stats = pdstream.Stats(self.formats[fmt], self.link.get())
+        stats = pdstream.Stats(self.formats[fmt])
         self.worker = threading.Thread(target=self.run, daemon=True,
                                        args=(self.device.get(), self.codec, self.sink, stats, self.stop))
         self.worker.start()
@@ -215,13 +206,8 @@ class App:
         self.root.destroy()
 
     def pick_format(self):
-        fmt = self.format.current()
-        if not self.running():
-            return
-        if fmt == pdstream.UNSTREAMABLE_FORMAT and self.link.get() == "msg":
-            self.restart_stream()  # start_stream switches to eval
-        else:
-            self.sink.requested_format = fmt  # as if the Playdate asked: the stream thread switches
+        if self.running():
+            self.sink.requested_format = self.format.current()  # as if the Playdate asked: the stream thread switches
 
     def poll(self):
         while True:

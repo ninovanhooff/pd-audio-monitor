@@ -2,11 +2,10 @@
 """Stream Mac audio (BlackHole, or a WAV file) to the USB Stream app on a Playdate.
 
 Encodes in a Playdate audio format with shared/codec (built into libpdstream by `make`) and sends
-it over USB serial, which the receiver decodes and plays on the speaker. The `msg` link sends base64
-text lines; the `eval` link sends Lua bytecode carrying raw bytes, in packets 5 times as large.
+it over USB serial as `eval` commands: Lua bytecode that hands each packet to the receiver, which
+decodes it and plays it on the speaker.
 """
 import argparse
-import base64
 import ctypes
 import queue
 import re
@@ -23,13 +22,9 @@ BLOCK = 1024
 PLAYDATE_VID = 0x1331
 # The receiver logs this over USB when the user picks a format on the Playdate.
 FORMAT_REQUEST = re.compile(rb"pdstream format (\d+)")
-# Packet layout is in usb-stream/receiver/src/packet.h. 183 bytes is 244 base64 characters, under
-# the device's limit of about 251 per message.
+# Packet layout is in usb-stream/receiver/src/packet.h.
 HEADER_BYTES = 4
-MSG_PACKET_BYTES = 183
-EVAL_PACKET_BYTES = 1024
-# Over msg, the bypass format needs 493 msg/s; a Playdate takes about 390.
-UNSTREAMABLE_FORMAT = 0
+PACKET_BYTES = 1024
 # pdc's compilation of `pdstream_feed("...")`: Playdate's Lua 5.4 with 4-byte integers and floats,
 # stripped. The string constant comes last, so the chunk can be built around any packet.
 EVAL_HEAD = bytes.fromhex("1b4c7561540019930d0a1a0a040404785600000040b9430180808000010285"
@@ -48,17 +43,10 @@ def lua_size(n):
     return bytes(out)
 
 
-def msg_command(packet):
-    return b"msg " + base64.b64encode(packet) + b"\n"
-
-
 def eval_command(packet):
     tag = 0x04 if len(packet) <= LUA_MAX_SHORT_STRING else 0x14
     chunk = EVAL_HEAD + bytes([tag]) + lua_size(len(packet) + 1) + packet + EVAL_TAIL
     return b"eval %d\n" % len(chunk) + chunk
-
-
-LINKS = {"eval": (EVAL_PACKET_BYTES, eval_command), "msg": (MSG_PACKET_BYTES, msg_command)}
 
 
 def load_encoder():
@@ -95,24 +83,23 @@ class Encoder:
 
 
 class Packetizer:
-    def __init__(self, fmt, unit_bytes, link):
+    def __init__(self, fmt, unit_bytes):
         self.fmt = fmt
         self.unit_bytes = unit_bytes
-        self.packet_bytes, self.command = LINKS[link]
         self.pending = bytearray()
         self.position = 0
         self.sequence = 0
 
-    def lines(self, data, flush=False):
+    def commands(self, data, flush=False):
         self.pending += data
-        payload = self.packet_bytes - HEADER_BYTES
+        payload = PACKET_BYTES - HEADER_BYTES
         out = []
         while len(self.pending) >= payload or (flush and self.pending):
             chunk = bytes(self.pending[:payload])
             del self.pending[:payload]
             offset = self.position % self.unit_bytes
             header = bytes([self.fmt, self.sequence, offset & 0xFF, offset >> 8])
-            out.append(self.command(header + chunk))
+            out.append(eval_command(header + chunk))
             self.position += len(chunk)
             self.sequence = (self.sequence + 1) & 0xFF
         return out
@@ -120,11 +107,10 @@ class Packetizer:
 
 class Codec:
     """Encoder and packetizer for the current format. switch() keeps the sequence numbers running, so
-    the receiver sees a format change rather than lost messages."""
+    the receiver sees a format change rather than lost packets."""
 
-    def __init__(self, lib, fmt, link):
+    def __init__(self, lib, fmt):
         self.lib = lib
-        self.link = link
         self.encoder = self.packetizer = None
         self.switch(fmt)
 
@@ -134,11 +120,11 @@ class Codec:
             self.lib.pdstream_free(self.encoder.handle)
         self.format = fmt
         self.encoder = Encoder(self.lib, fmt)
-        self.packetizer = Packetizer(fmt, self.lib.pdstream_unit_bytes(fmt), self.link)
+        self.packetizer = Packetizer(fmt, self.lib.pdstream_unit_bytes(fmt))
         self.packetizer.sequence = sequence
 
-    def lines(self, mono, flush=False):
-        return self.packetizer.lines(self.encoder.encode(mono), flush)
+    def commands(self, mono, flush=False):
+        return self.packetizer.commands(self.encoder.encode(mono), flush)
 
 
 class Console:
@@ -230,11 +216,11 @@ class SerialSink:
         console.log(f"Playdate on {ports[0]}")
         return True
 
-    def write(self, lines):
+    def write(self, commands):
         if self.port is None and not self._reconnect():
             return False
         try:
-            self.port.write(b"".join(lines))
+            self.port.write(b"".join(commands))
             return True
         except (self.serial.SerialException, OSError):
             port, self.port = self.port, None
@@ -260,38 +246,35 @@ class FileSink:
     def __init__(self, path):
         self.file = open(path, "wb")
 
-    def write(self, lines):
-        self.file.writelines(lines)
+    def write(self, commands):
+        self.file.writelines(commands)
         return True
 
 
 class Stats:
-    def __init__(self, name, link):
+    def __init__(self, name):
         self.name = name
-        self.link = link
-        self.lines = self.bytes = self.peak = 0
+        self.commands = self.bytes = self.peak = 0
         self.last = time.monotonic()
 
-    def add(self, mono, lines):
-        self.lines += len(lines)
-        self.bytes += sum(len(line) for line in lines)
+    def add(self, mono, commands):
+        self.commands += len(commands)
+        self.bytes += sum(len(command) for command in commands)
         if len(mono):
             self.peak = max(self.peak, int(np.abs(mono.astype(np.int32)).max()))
         now = time.monotonic()
         if now - self.last >= 1:
             seconds = now - self.last
             peak = 20 * np.log10(self.peak / 32768) if self.peak else -99
-            console.status(f"{self.name}: {self.lines / seconds:4.0f} {self.link}/s  "
+            console.status(f"{self.name}: {self.commands / seconds:4.0f} eval/s  "
                            f"{self.bytes / seconds / 1000:5.1f} KB/s on the wire  peak {peak:6.1f} dBFS")
-            self.lines = self.bytes = self.peak = 0
+            self.commands = self.bytes = self.peak = 0
             self.last = now
 
 
 def follow_playdate(codec, sink, stats, names):
     fmt = sink.requested_format
     if fmt is None or fmt == codec.format or not 0 <= fmt < len(names):
-        return
-    if fmt == UNSTREAMABLE_FORMAT and codec.link == "msg":
         return
     codec.switch(fmt)
     stats.name = names[fmt]
@@ -314,9 +297,9 @@ def stream_file(path, codec, sink, stats, names, paced):
         part = mono[offset:offset + BLOCK]
         last = offset + BLOCK >= len(mono)
         follow_playdate(codec, sink, stats, names)
-        lines = codec.lines(part, flush=last)
-        sent = sink.write(lines)
-        stats.add(part, lines if sent else [])
+        commands = codec.commands(part, flush=last)
+        sent = sink.write(commands)
+        stats.add(part, commands if sent else [])
         if paced:
             delay = start + (offset + BLOCK) / RATE - time.monotonic()
             if delay > 0:
@@ -423,9 +406,9 @@ def stream_device(name, codec, sink, stats, names, stop=None):
             except queue.Empty:
                 continue
             follow_playdate(codec, sink, stats, names)
-            lines = codec.lines(mono)
-            sent = sink.write(lines)
-            stats.add(mono, lines if sent else [])
+            commands = codec.commands(mono)
+            sent = sink.write(commands)
+            stats.add(mono, commands if sent else [])
             if blocks.qsize() > 20:
                 console.log("Falling behind: the serial link is slower than this format needs.")
 
@@ -439,20 +422,16 @@ def main():
                         help="format number, see below; the Playdate's d-pad switches it while streaming")
     parser.add_argument("--device", default="BlackHole", help="input device name or part of it (default BlackHole)")
     parser.add_argument("--input", type=Path, help="stream a 16-bit 44.1 kHz WAV file instead of a device")
-    parser.add_argument("--link", choices=LINKS, default="eval",
-                        help="eval: Lua bytecode carrying raw bytes (default); msg: base64 text lines")
     parser.add_argument("--port", help="serial port (default: the first Playdate found)")
     parser.add_argument("--out", type=Path, help="write what would go to the Playdate to a file")
     parser.add_argument("--verbose", action="store_true", help="show what the Playdate prints")
     args = parser.parse_args()
     if not 0 <= args.format < len(formats):
         parser.error(f"--format must be 0 to {len(formats) - 1}")
-    if args.format == UNSTREAMABLE_FORMAT and args.link == "msg" and not args.out:
-        parser.error(f"format {args.format} needs more messages per second than a Playdate takes; use --link eval")
 
-    codec = Codec(lib, args.format, args.link)
+    codec = Codec(lib, args.format)
     sink = FileSink(args.out) if args.out else SerialSink(args.port, args.verbose)
-    stats = Stats(formats[args.format], args.link)
+    stats = Stats(formats[args.format])
     try:
         if args.input:
             stream_file(args.input, codec, sink, stats, formats, paced=not args.out)
