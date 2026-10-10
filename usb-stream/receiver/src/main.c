@@ -40,6 +40,9 @@ static struct {
     int peak;
     int clipped;
     float meterDb;
+    float windowDb;
+    float shownDb;
+    unsigned int windowStartMs;
     int clipHold;
     unsigned int lastSecond;
     uint32_t lastPackets;
@@ -179,6 +182,14 @@ static void drawMeter(int y) {
     float db = framePeak > 0 ? 20.0f * log10f((float)framePeak / 32768.0f) : -60.0f;
     ui.meterDb = db > ui.meterDb ? db : ui.meterDb - 1.0f;
     if (ui.meterDb < -60) ui.meterDb = -60;
+    // The bar moves every frame; the number shows each window's peak so it can be read.
+    if (db > ui.windowDb) ui.windowDb = db;
+    unsigned int now = pd->system->getCurrentTimeMilliseconds();
+    if (now - ui.windowStartMs >= 500) {
+        ui.shownDb = ui.windowDb;
+        ui.windowDb = -60;
+        ui.windowStartMs = now;
+    }
     if (ui.clipped) {
         ui.clipped = 0;
         ui.clipHold = 30;
@@ -198,7 +209,7 @@ static void drawMeter(int y) {
         ui.clipHold--;
         pd->system->formatString(&level, "CLIP");
     } else {
-        int tenths = (int)lrintf(-ui.meterDb * 10.0f);
+        int tenths = (int)lrintf(-ui.shownDb * 10.0f);
         pd->system->formatString(&level, "-%d.%ddB", tenths / 10, tenths % 10);
         font = fonts.value;
     }
@@ -252,6 +263,8 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     packet_init(&receiver);
     ui.output = OUTPUT_SPEAKER;
     ui.meterDb = -60;
+    ui.windowDb = -60;
+    ui.shownDb = -60;
     ui.lastSecond = pd->system->getCurrentTimeMilliseconds() / 1000;
 
     pd->system->setAutoLockDisabled(1);
