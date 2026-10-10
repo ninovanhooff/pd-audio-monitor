@@ -34,6 +34,30 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  macos-host:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: usb-stream/host
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install numpy pyserial sounddevice pyinstaller
+      - run: make app
+      - run: ditto -c -k --keepParent "dist/PD Audio Monitor Host.app" "PD-Audio-Monitor-Host-${GITHUB_REF_NAME}-macos-arm64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PD-Audio-Monitor-Host-macos-arm64
+          path: usb-stream/host/PD-Audio-Monitor-Host-*-macos-arm64.zip
+      - if: startsWith(github.ref, 'refs/tags/')
+        run: gh release upload "$GITHUB_REF_NAME" PD-Audio-Monitor-Host-*-macos-arm64.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   receiver:
     runs-on: ubuntu-latest
     permissions:

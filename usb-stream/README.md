@@ -164,9 +164,9 @@ Playdate SDK's ARM toolchain and isn't built on Windows: take it from the releas
 
 ### Releases
 
-`.github/workflows/release-builds.yml` builds the Windows host (`.exe` in a zip) and the receiver
-(`.pdx` zip) on GitHub: run it from the Actions tab, or push a `v*` tag for a release that already
-exists, and it attaches both zips. The macOS host is built locally, as above.
+`.github/workflows/release-builds.yml` builds the macOS host (`.app` in a zip), the Windows host
+(`.exe` in a zip) and the receiver (`.pdx` zip) on GitHub: run it from the Actions tab, or push a `v*`
+tag for a release that already exists, and it attaches all three zips.
 
 ### Test
 
