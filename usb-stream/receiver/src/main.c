@@ -161,17 +161,17 @@ static int codecRank(int format) {
 }
 
 // Not every rate has every codec: a rate step lands on the nearest codec that rate has, and a codec
-// step goes to the next one the rate has, staying put at either end.
+// step goes to the next one the rate has. Both wrap around.
 static void stepFormat(int rateStep, int codecStep) {
     int current = ui.wantedFormat >= 0 ? ui.wantedFormat : receiver.format >= 0 ? receiver.format : chain_default_format;
-    int rate = rateRank(current) + rateStep, codec = codecRank(current);
+    int rate = (rateRank(current) + rateStep + 3) % 3, codec = codecRank(current);
     int best = -1, bestDistance = 0;
     for (int format = 0; format < chain_format_count; format++) {
         if (format == PACKET_UNSTREAMABLE_FORMAT || rateRank(format) != rate) continue;
         int distance = codecRank(format) - codec;
         if (codecStep) {
             distance *= codecStep;
-            if (distance <= 0) continue;
+            if (distance <= 0) distance += 3;
         } else {
             distance = distance < 0 ? -distance * 2 : distance * 2 + 1; // on a tie, the lighter codec
         }
