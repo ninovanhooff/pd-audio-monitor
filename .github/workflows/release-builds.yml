@@ -15,8 +15,8 @@ jobs:
         shell: bash
         working-directory: usb-stream/host
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install numpy pyserial sounddevice pyinstaller
@@ -25,7 +25,7 @@ jobs:
           encoder.c ../../shared/codec/format_stream.c ../../shared/codec/format_chain.c ../../shared/codec/ima_adpcm.c
       - run: python -m PyInstaller --noconfirm --log-level WARN --workpath build/app --distpath dist host.spec
       - run: 7z a "PD-Audio-Monitor-Host-${GITHUB_REF_NAME}-windows-x64.zip" "./dist/PD Audio Monitor Host.exe"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: PD-Audio-Monitor-Host-windows-x64
           path: usb-stream/host/PD-Audio-Monitor-Host-*-windows-x64.zip
@@ -42,14 +42,14 @@ jobs:
       run:
         working-directory: usb-stream/host
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install numpy pyserial sounddevice pyinstaller
       - run: make app
       - run: ditto -c -k --keepParent "dist/PD Audio Monitor Host.app" "PD-Audio-Monitor-Host-${GITHUB_REF_NAME}-macos-arm64.zip"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: PD-Audio-Monitor-Host-macos-arm64
           path: usb-stream/host/PD-Audio-Monitor-Host-*-macos-arm64.zip
@@ -63,7 +63,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
       - name: Install the Playdate SDK
         run: |
@@ -72,7 +72,7 @@ jobs:
       - run: make -C usb-stream/receiver
       - run: zip -r "PDAudioMonitorReceiver-${GITHUB_REF_NAME}.pdx.zip" PDAudioMonitorReceiver.pdx
         working-directory: usb-stream/receiver
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: PDAudioMonitorReceiver
           path: usb-stream/receiver/PDAudioMonitorReceiver-*.pdx.zip
