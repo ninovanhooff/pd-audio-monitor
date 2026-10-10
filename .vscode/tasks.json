@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build encoder library",
+      "type": "shell",
+      "command": "make",
+      "args": ["-C", "usb-stream/host"],
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Run PD Audio Monitor Host",
+      "type": "shell",
+      "command": "${userHome}/.venvs/pdstream/bin/python",
+      "args": ["usb-stream/host/pdstream_gui.py"],
+      "dependsOn": "Build encoder library",
+      "windows": {
+        "command": "python"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true }
+    }
+  ]
+}
