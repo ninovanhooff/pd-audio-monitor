@@ -58,7 +58,7 @@ def eval_command(packet):
     return b"eval %d\n" % len(chunk) + chunk
 
 
-LINKS = {"msg": (MSG_PACKET_BYTES, msg_command), "eval": (EVAL_PACKET_BYTES, eval_command)}
+LINKS = {"eval": (EVAL_PACKET_BYTES, eval_command), "msg": (MSG_PACKET_BYTES, msg_command)}
 
 
 def load_encoder():
@@ -439,8 +439,8 @@ def main():
                         help="format number, see below; the Playdate's d-pad switches it while streaming")
     parser.add_argument("--device", default="BlackHole", help="input device name or part of it (default BlackHole)")
     parser.add_argument("--input", type=Path, help="stream a 16-bit 44.1 kHz WAV file instead of a device")
-    parser.add_argument("--link", choices=LINKS, default="msg",
-                        help="msg: base64 text lines; eval: Lua bytecode carrying raw bytes (default msg)")
+    parser.add_argument("--link", choices=LINKS, default="eval",
+                        help="eval: Lua bytecode carrying raw bytes (default); msg: base64 text lines")
     parser.add_argument("--port", help="serial port (default: the first Playdate found)")
     parser.add_argument("--out", type=Path, help="write what would go to the Playdate to a file")
     parser.add_argument("--verbose", action="store_true", help="show what the Playdate prints")

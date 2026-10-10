@@ -53,7 +53,7 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
    ```bash
    ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py          # default 22.05 kHz IMA ADPCM
    ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py --help   # formats, --link, --device, --port, --input file.wav
-   ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py --link eval --format 0   # bypass, over eval
+   ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py --format 0             # bypass
    usb-stream/host/dist/pdstream                                     # the bundle takes the same options
    ```
 
@@ -95,10 +95,10 @@ on a Playdate over `msg`, and the bypass plays over `eval` (86 `eval`/s measured
 
 `pdstream.py --link` picks how packets travel:
 
-- `msg` (default): each line is `msg <base64>\n`. A message's text can't carry raw bytes and is
+- `msg`: each line is `msg <base64>\n`. A message's text can't carry raw bytes and is
   capped at about 251 characters, so each packet is at most 183 bytes, which is 244 base64
   characters.
-- `eval`: each packet is 1024 raw bytes inside `eval <length>\n<Lua bytecode>`. The bytecode is a
+- `eval` (default): each packet is 1024 raw bytes inside `eval <length>\n<Lua bytecode>`. The bytecode is a
   call `pdstream_feed("<packet>")`, built around the packet from a template that equals pdc's output
   (`EVAL_HEAD` in `pdstream.py`; the tests compare it with pdc). The receiver's empty `main.lua`
   starts the Lua runtime that `eval` runs in; C registers `pdstream_feed` and sets its update

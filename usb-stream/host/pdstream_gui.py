@@ -108,7 +108,7 @@ class App:
         self.format.pack(side="left", padx=(4, 12))
         self.format.bind("<<ComboboxSelected>>", lambda event: self.pick_format())
         ttk.Label(controls, text="Link").pack(side="left")
-        self.link = tk.StringVar(value="msg")
+        self.link = tk.StringVar(value="eval")
         for link in pdstream.LINKS:
             ttk.Radiobutton(controls, text=link, value=link, variable=self.link,
                             command=self.restart_stream).pack(side="left", padx=2)
