@@ -1,0 +1,6 @@
+name=Line-in Monitor
+author=Nino van Hooff
+description=Plays the headset input through the speaker as it would sound in a Playdate audio format.
+bundleID=nl.ninovanhooff.lineinmonitor
+version=0.1
+buildNumber=1

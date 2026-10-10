@@ -1,0 +1,6 @@
+name=Playback Probe
+author=Nino van Hooff
+description=Measures the system ADPCM decoder rounding and sample upsampling.
+bundleID=nl.ninovanhooff.playbackprobe
+version=0.1
+buildNumber=1
