@@ -204,7 +204,7 @@ static void drawMeter(int y) {
         ui.clipHold = 30;
     }
 
-    const int x = 12, width = 320, height = 14;
+    const int x = 12, width = 300, height = 14;
     int filled = (int)((ui.meterDb + 60.0f) / 60.0f * (float)width);
     pd->graphics->drawRect(x, y, width, height, kColorBlack);
     pd->graphics->fillRect(x, y, filled, height, kColorBlack);
@@ -212,9 +212,20 @@ static void drawMeter(int y) {
         int markX = x + (mark + 60) * width / 60;
         pd->graphics->drawLine(markX, y + height, markX, y + height + 3, 1, kColorBlack);
     }
+    char* level = NULL;
+    LCDFont* font = fonts.label;
     if (ui.clipHold > 0) {
         ui.clipHold--;
-        drawString(fonts.label, "CLIP", x + width + 12, y);
+        pd->system->formatString(&level, "CLIP");
+    } else {
+        int tenths = (int)lrintf(-ui.meterDb * 10.0f);
+        pd->system->formatString(&level, "-%d.%ddB", tenths / 10, tenths % 10);
+        font = fonts.value;
+    }
+    if (level) {
+        int textWidth = pd->graphics->getTextWidth(font, level, strlen(level), kUTF8Encoding, 0);
+        drawString(font, level, 388 - textWidth, y);
+        pd->system->realloc(level, 0);
     }
 }
 

@@ -16,8 +16,10 @@ Mac headphone out (TRS) ──► splitter "mic" socket ─┐
 - Use a **TRRS headset splitter** (CTIA pinout, the common "phone headset to separate mic + headphones"
   adapter). A plain TRRS-to-TRRS cable from the Mac won't work, because it connects mic pin to mic pin.
 - The headset mic input expects **mic level**, while line/headphone out is much hotter. Start with the
-  Mac volume low and raise it until the meter peaks well below `CLIP`. If it distorts even at low
-  volume, use a line-to-mic attenuator cable.
+  Mac volume low and raise it while watching the peak level next to the meter; it shows `CLIP`
+  instead when the input clips. If it distorts even at low volume, use a line-to-mic attenuator cable.
+- **Unplug the USB cable while listening.** With USB attached, the headset input picks up
+  significant noise; run the Playdate on battery.
 - The app forces the headset input (`kMicInputHeadset`) because the jack's detection circuit doesn't
   always notice a splitter. It also keeps the speaker on even though something is plugged into the jack.
 
