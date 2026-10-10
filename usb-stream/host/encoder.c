@@ -1,4 +1,4 @@
-// ctypes entry points for pdstream.py, so the Mac encodes with the same code the chain tests cover.
+// ctypes entry points for pdstream.py, so the host encodes with the same code the chain tests cover.
 #include <stdlib.h>
 
 #include "format_stream.h"

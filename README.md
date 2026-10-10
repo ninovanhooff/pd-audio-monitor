@@ -1,11 +1,11 @@
 # pd-audio-monitor
 
 Tools for Playdate game composers to hear their music on the **Playdate's own speaker**, as it
-would sound in a shipped audio format (default 22.05 kHz mono IMA ADPCM), while they work on a Mac.
+would sound in a shipped audio format (default 22.05 kHz mono IMA ADPCM), while they work on a Mac or Windows PC.
 
 | Folder | What | Status |
 | --- | --- | --- |
-| [`usb-stream/`](usb-stream/) | Mac (BlackHole) → `pdstream.py` → USB serial → PD Audio Monitor Receiver (Playdate app) → speaker, digital end to end | Bit-exact on the host; plays on hardware in every format |
+| [`usb-stream/`](usb-stream/) | Mac (BlackHole) or Windows (VB-Cable) → `pdstream.py` → USB serial → PD Audio Monitor Receiver (Playdate app) → speaker, digital end to end | Bit-exact on the host; plays on hardware in every format |
 | [`line-in-monitor/`](line-in-monitor/) | Playdate app: headset mic input → format emulation → speaker. Plug the Mac's audio out in with a splitter. | Builds; verified in the Simulator; noisy input on hardware |
 | [`probes/playback-probe/`](probes/playback-probe/) | Playdate app that measures the system ADPCM rounding and upsampling the emulation copies | Simulator results in; run on device |
 | [`shared/codec/`](shared/codec/) | C: IMA ADPCM (WAV and `.pda` layouts), the format-emulation chain and its sender/receiver split, plus host tests against ffmpeg, `audioop` and pdc | Tested |

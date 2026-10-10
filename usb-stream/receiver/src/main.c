@@ -18,7 +18,7 @@ static struct {
 #define RING_SIZE 32768
 #define RING_MASK (RING_SIZE - 1)
 #define PRIME_FILL 6615 // 150 ms
-#define MAX_FILL 17640  // 400 ms: beyond it the Mac's clock has run ahead, so drop back to PRIME_FILL
+#define MAX_FILL 17640  // 400 ms: beyond it the host's clock has run ahead, so drop back to PRIME_FILL
 #define REPLAY_FILL 8820
 #define REPLAY_MAX_COMMAND 2048
 
@@ -164,7 +164,7 @@ static int isReceiving(void) {
 }
 
 // The console goes out over USB, where pdstream.py picks the request up. Repeated until the stream
-// switches, since pdstream.py may not be listening yet (or anymore); after that the Mac may pick
+// switches, since pdstream.py may not be listening yet (or anymore); after that the host may pick
 // another format.
 static void requestFormat(void) {
     unsigned int now = pd->system->getCurrentTimeMilliseconds();
@@ -299,7 +299,7 @@ static int update(void* userdata) {
     if (ui.wantedFormat >= 0 && ui.wantedFormat != receiver.format) {
         drawRow(40, "Format", "✛", "%s ...", chain_formats[ui.wantedFormat].name);
     } else {
-        drawRow(40, "Format", "✛", "%s", isReceiving() ? chain_formats[receiver.format].name : "waiting for the Mac");
+        drawRow(40, "Format", "✛", "%s", isReceiving() ? chain_formats[receiver.format].name : "waiting for the host");
     }
     drawRow(64, "Output", "Ⓑ", "%s", outputNames[ui.output]);
     int kbTenths = ui.bytesPerSecond / 100;
@@ -307,7 +307,7 @@ static int update(void* userdata) {
     drawRow(112, "Buffer", "", "%d ms", (int)((writePos - readPos) / 44));
     drawMeter(142);
     drawRow(166, "Dropouts", "", "%d lost, %d under, %d over", (int)receiver.lost, (int)underruns, (int)overruns);
-    drawString(fonts.value, "Mac: route audio to BlackHole and run", 12, 196);
+    drawString(fonts.value, "Computer: route audio to a cable, run", 12, 196);
     drawString(fonts.value, "PD Audio Monitor Host", 12, 214);
     return 1;
 }

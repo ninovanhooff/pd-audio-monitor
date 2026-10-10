@@ -1,6 +1,6 @@
 # usb-stream: PD Audio Monitor Host and Receiver
 
-![PD Audio Monitor Receiver on a Playdate, streaming from PD Audio Monitor Host on a Mac](../screenshots/pd-audio-monitor-banner.png)
+![PD Audio Monitor Receiver on a Playdate, streaming from PD Audio Monitor Host on a computer](../screenshots/pd-audio-monitor-banner.png)
 
 Plays Mac or Windows audio on the **Playdate's speaker** over the USB cable, encoded in a Playdate audio
 format. The signal stays digital end to end, so there's none of the analog noise of

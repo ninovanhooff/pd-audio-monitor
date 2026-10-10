@@ -1,6 +1,6 @@
 name=PD Audio Monitor Receiver
 author=Nino van Hooff
-description=Plays audio streamed from a Mac over USB, encoded in a Playdate audio format.
+description=Plays audio streamed from a computer over USB, encoded in a Playdate audio format.
 bundleID=nl.ninovanhooff.usbstream
 version=1.0
 buildNumber=1
