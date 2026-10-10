@@ -20,6 +20,7 @@ shared/codec/tests/run_tests.sh       # ffmpeg required; audioop (pip install au
 usb-stream/tests/run_tests.sh         # ffmpeg, numpy
 line-in-monitor/tests/sim_e2e.sh      # headless Linux: Xvfb, xdotool, ImageMagick, pulseaudio, numpy
 usb-stream/tests/sim_e2e.sh           # same, replaying recorded packets (the Simulator has no serial input)
+scripts/quickinstall.sh -i line-in-monitor   # macOS: build, copy to a USB-connected Playdate, run
 ```
 
 Device builds need `arm-none-eabi-gcc` (on Ubuntu: `gcc-arm-none-eabi libnewlib-arm-none-eabi`).
