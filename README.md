@@ -1,4 +1,4 @@
-# Playdate speaker preview
+# pd-audio-monitor
 
 Tools for Playdate game composers to hear their music on the **Playdate's own speaker**, as it
 would sound in a shipped audio format (default 22.05 kHz mono IMA ADPCM), while they work on a Mac.
