@@ -164,10 +164,12 @@ static int isReceiving(void) {
 }
 
 // The console goes out over USB, where pdstream.py picks the request up. Repeated until the stream
-// switches, since pdstream.py may not be listening yet (or anymore).
+// switches, since pdstream.py may not be listening yet (or anymore); after that the Mac may pick
+// another format.
 static void requestFormat(void) {
     unsigned int now = pd->system->getCurrentTimeMilliseconds();
-    if (ui.wantedFormat < 0 || ui.wantedFormat == receiver.format || now - ui.lastRequestMs < 1000) return;
+    if (ui.wantedFormat == receiver.format) ui.wantedFormat = -1;
+    if (ui.wantedFormat < 0 || now - ui.lastRequestMs < 1000) return;
     pd->system->logToConsole("pdstream format %d", ui.wantedFormat);
     ui.lastRequestMs = now;
 }
