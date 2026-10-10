@@ -129,6 +129,9 @@ def gain_db(fmt, freq):
     return db(rms(y[skip:]) / rms(x[skip:]))
 
 
+# Divisor per format, as in format_chain.c.
+FORMATS = [1, 1, 2, 4, 2, 2, 4]
+
 passthrough = tone(1000, 0.2)
 check("format 0 (bypass) is the identity", render(0, passthrough) == passthrough)
 for fmt, name, nyquist in [(2, "22.05 kHz ADPCM", 11025), (4, "22.05 kHz 16-bit", 11025), (6, "11.025 kHz 8-bit", 5512)]:
@@ -136,5 +139,18 @@ for fmt, name, nyquist in [(2, "22.05 kHz ADPCM", 11025), (4, "22.05 kHz 16-bit"
     check(f"{name}: 1 kHz passes", abs(passband) < 1.0, f"{passband:+.2f} dB")
     stop = gain_db(fmt, nyquist * 1.3)
     check(f"{name}: {nyquist * 1.3:.0f} Hz is rejected", stop < -30, f"{stop:+.1f} dB")
+
+# 5. The chain split across a link (sender encodes, receiver decodes) matches the whole chain.
+random.seed(2)
+mix = [int(0.6 * a + b) for a, b in zip(tone(440, 1.0), [random.randint(-6000, 6000) for _ in range(RATE)])]
+for fmt in range(len(FORMATS)):
+    whole = render(fmt, mix)
+    out = subprocess.run([build / "stream_render", str(fmt)], input=struct.pack(f"<{len(mix)}h", *mix),
+                         capture_output=True, check=True).stdout
+    split = list(struct.unpack(f"<{len(out) // 2}h", out))
+    delay = FORMATS[fmt] - 1
+    n = min(len(split), len(whole) - delay)
+    check(f"format {fmt}: stream encode + decode matches the chain", n > RATE * 0.9 and
+          split[:n] == whole[delay:delay + n], f"{n} samples")
 
 sys.exit(1 if failures else 0)

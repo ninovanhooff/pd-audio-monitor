@@ -20,7 +20,11 @@ Mac audio out → TRRS splitter → Playdate headset mic input → format emulat
   setting (line out vs mic level). Lua can't do this: its mic API only records into fixed-length
   samples, so streaming mic → speaker needs C (`setMicCallback` plus a callback source).
 
-## 2. Digital streaming from the Mac
+## 2. Digital streaming from the Mac, built: `usb-stream/`
+
+The prototype is BlackHole, then `pdstream.py`, then serial `msg` lines, then a C receiver. The
+sender and receiver halves of the chain reproduce `chain_render` bit for bit (host tests).
+`msg` throughput on the device is the open question **(measure)**.
 
 Mac captures audio → encodes in the target format → sends it to a receiver app → the receiver
 decodes and plays it.
@@ -53,7 +57,8 @@ decodes and plays it.
 
 ### Receiver
 
-The user prefers Lua (for `eval`). Lua alone can't feed PCM to the audio engine: there's no API to
+Built in C on `msg` (`usb-stream/receiver`), since `msg` needs no Lua. `eval` stays the fallback
+if `msg` can't carry the format. The user prefers Lua (for `eval`). Lua alone can't feed PCM to the audio engine: there's no API to
 write bytes into a sample, so a receiver would have to go through files and suffer gaps. So the
 receiver is a **C+Lua hybrid**: Lua takes in `eval`/`msg` data and passes it to a C function, and C
 decodes into a ring buffer played by a callback source. That's the same playback path as the line-in
@@ -90,8 +95,9 @@ The speaker mixes both channels to mono (SDK 1.13), so stereo only matters on he
 
 ## Order of work
 
-1. Run `probes/playback-probe` and `line-in-monitor` on hardware. Judge the analog input's noise.
-2. If the line-in is good enough, polish it (presets, level calibration tone, recording A/B).
-3. Otherwise, or as well, the serial spike: a C+Lua receiver plus a host script. Measure `msg`
-   cadence and `eval` throughput.
-4. A macOS companion app, starting with BlackHole or a process tap. The HAL device comes later.
+1. Run `probes/playback-probe` on hardware. The line-in monitor's input is noisy on hardware,
+   worse with USB attached.
+2. Run `usb-stream` on hardware: does `msg` keep up with format 2 (62 messages/s), and with
+   which formats? If not, try `eval` with binary payloads.
+3. A macOS companion app (menu bar, format picker, process tap) in place of BlackHole and the script.
+   The HAL device comes later.

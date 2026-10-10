@@ -8,4 +8,6 @@ cc=${CC:-cc}
 flags="-std=c11 -O2 -Wall -Wextra -Werror"
 $cc $flags -o "$build/adpcm_wav" "$here/adpcm_wav.c" "$here/../ima_adpcm.c"
 $cc $flags -o "$build/chain_render" "$here/chain_render.c" "$here/../format_chain.c" "$here/../ima_adpcm.c" -lm
+$cc $flags -o "$build/stream_render" "$here/stream_render.c" "$here/../format_stream.c" "$here/../format_chain.c" \
+    "$here/../ima_adpcm.c" -lm
 python3 "$here/check.py" "$build"

@@ -5,12 +5,13 @@ would sound in a shipped audio format (default 22.05 kHz mono IMA ADPCM), while 
 
 | Folder | What | Status |
 | --- | --- | --- |
-| [`line-in-monitor/`](line-in-monitor/) | Playdate app: headset mic input → format emulation → speaker. Plug the Mac's audio out in with a splitter. | Builds; verified in the Simulator; untested on hardware |
+| [`usb-stream/`](usb-stream/) | Mac (BlackHole) → `pdstream.py` → USB serial → Playdate app → speaker, digital end to end | Bit-exact on the host; receiver verified in the Simulator; untested on hardware |
+| [`line-in-monitor/`](line-in-monitor/) | Playdate app: headset mic input → format emulation → speaker. Plug the Mac's audio out in with a splitter. | Builds; verified in the Simulator; noisy input on hardware |
 | [`probes/playback-probe/`](probes/playback-probe/) | Playdate app that measures the system ADPCM rounding and upsampling the emulation copies | Simulator results in; run on device |
-| [`shared/codec/`](shared/codec/) | C: IMA ADPCM (WAV and `.pda` layouts) and the format-emulation chain, plus host tests against ffmpeg, `audioop` and pdc | Tested |
+| [`shared/codec/`](shared/codec/) | C: IMA ADPCM (WAV and `.pda` layouts), the format-emulation chain and its sender/receiver split, plus host tests against ffmpeg, `audioop` and pdc | Tested |
 | [`docs/approaches.md`](docs/approaches.md) | Analog line-in vs digital streaming (virtual device / process tap, USB serial `msg`/`eval`, Wi-Fi), with what we've measured | |
 
-Planned: a serial receiver (C+Lua) and a macOS companion app/virtual output device. See the docs.
+Planned: a macOS companion app or virtual output device instead of BlackHole + a script. See the docs.
 
 ## Quick start
 
