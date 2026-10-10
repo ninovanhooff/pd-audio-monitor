@@ -19,7 +19,29 @@ SOUND_SETTINGS = "x-apple.systempreferences:com.apple.preference.sound"
 BLACKHOLE_URL = "https://existential.audio/blackhole/"
 LOG_LINES = 2000
 
-SETUP = [
+WINDOWS = sys.platform == "win32"
+VBCABLE_URL = "https://vb-audio.com/Cable/"
+
+SETUP_WINDOWS = [
+    ("Install VB-Cable", "A virtual audio device: what plays into CABLE Input, the host app captures from "
+     "CABLE Output. Download it, run the installer as administrator and restart Windows.",
+     [("VB-Cable website", lambda: webbrowser.open(VBCABLE_URL))]),
+    ("Send audio to CABLE Input", "Pick CABLE Input as Windows' sound output, or as your player's or DAW's "
+     "output device. To hear it on the PC too, tick \"Listen to this device\" on CABLE Output's properties "
+     "(Recording tab); the Playdate plays a few hundred ms later.",
+     [("Sound settings", lambda: subprocess.run(["cmd", "/c", "start", "ms-settings:sound"]))]),
+    ("Start PD Audio Monitor Receiver on the Playdate", "Install PDAudioMonitorReceiver.pdx, start it, "
+     "and keep the Playdate connected over USB and unlocked.", []),
+]
+
+TROUBLESHOOTING_WINDOWS = [
+    ("Peak stays at -99 dBFS", "Nothing reaches CABLE Input: check Windows' (or the player's) output device."),
+    ("Waiting for a Playdate", "Plug it in and unlock it. Quit the Playdate Simulator: it also holds the "
+     "Playdate's serial port."),
+    ("Falling behind, or dropouts", "The USB link is slower than the format needs: pick a lighter one."),
+]
+
+SETUP = SETUP_WINDOWS if WINDOWS else [
     ("Install BlackHole 2ch", "A virtual audio device: what plays into it, the host app captures. "
      "Download it, or run `brew install blackhole-2ch`.", [("BlackHole website", lambda: webbrowser.open(BLACKHOLE_URL))]),
     ("Set BlackHole 2ch to 44.1 kHz", "In Audio MIDI Setup. To hear the Mac too, create a Multi-Output Device "
@@ -34,7 +56,7 @@ SETUP = [
      [("Microphone settings", lambda: subprocess.run(["open", MICROPHONE_SETTINGS]))]),
 ]
 
-TROUBLESHOOTING = [
+TROUBLESHOOTING = TROUBLESHOOTING_WINDOWS if WINDOWS else [
     ("Peak stays at -99 dBFS", "Nothing reaches BlackHole: check the Mac's (or the DAW's) output device. "
      "If the microphone row isn't \"Authorized\", allow PD Audio Monitor Host in Microphone settings, then "
      "press Reopen: macOS applies the change only to a new launch."),
@@ -85,14 +107,18 @@ class App:
         status.columnconfigure(1, weight=1)
         self.rows = {}
         for row, name in enumerate(("Playdate", "Microphone", "Stream")):
+            if name == "Microphone" and sys.platform != "darwin":
+                continue
             ttk.Label(status, text=name).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=2)
             self.rows[name] = ttk.Label(status, text="-")
             self.rows[name].grid(row=row, column=1, sticky="w")
-        ttk.Button(status, text="Microphone settings",
-                   command=lambda: subprocess.run(["open", MICROPHONE_SETTINGS])).grid(row=1, column=2, sticky="e")
-        # macOS applies access changed in Settings only to a new process.
-        self.reopen = ttk.Button(status, text="Reopen", command=self.reopen_app)
-        self.reopen.grid(row=1, column=3, sticky="e", padx=(4, 0))
+        self.reopen = None
+        if sys.platform == "darwin":
+            ttk.Button(status, text="Microphone settings",
+                       command=lambda: subprocess.run(["open", MICROPHONE_SETTINGS])).grid(row=1, column=2, sticky="e")
+            # macOS applies access changed in Settings only to a new process.
+            self.reopen = ttk.Button(status, text="Reopen", command=self.reopen_app)
+            self.reopen.grid(row=1, column=3, sticky="e", padx=(4, 0))
 
         controls = ttk.Frame(main, padding=(0, 10))
         controls.pack(fill="x")
@@ -113,7 +139,7 @@ class App:
         tabs = ttk.Notebook(main)
         tabs.pack(fill="both", expand=True)
         self.log = scrolledtext.ScrolledText(tabs, height=10, state="disabled", wrap="word",
-                                             font=("Menlo", 11), borderwidth=0)
+                                             font=("Consolas" if WINDOWS else "Menlo", 11), borderwidth=0)
         tabs.add(self.log, text="Log")
         tabs.add(self.guide(SETUP, numbered=True), text="Setup")
         tabs.add(self.guide(TROUBLESHOOTING), text="Troubleshooting")
@@ -137,16 +163,14 @@ class App:
         return frame
 
     def list_devices(self):
-        import sounddevice as sd
-
-        names = [d["name"] for d in sd.query_devices() if d["max_input_channels"] > 0]
+        names = [d["name"] for d in pdstream.input_devices()]
         current = self.device.get()
         self.device["values"] = names
         if current not in names:
-            blackhole = [name for name in names if "BlackHole" in name]
-            self.device.set(blackhole[0] if blackhole else names[0] if names else "")
-            if not blackhole:
-                self.write_log("BlackHole not found: see Setup, then press ↻ and pick it under Input.")
+            virtual = [name for name in names if pdstream.DEFAULT_DEVICE.lower() in name.lower()]
+            self.device.set(virtual[0] if virtual else names[0] if names else "")
+            if not virtual:
+                self.write_log(f"{pdstream.DEFAULT_DEVICE} not found: see Setup, then press ↻ and pick it under Input.")
 
     def write_log(self, text):
         self.log.configure(state="normal")
@@ -227,16 +251,17 @@ class App:
                     self.restart = False
                     self.start_stream()
 
-        access = pdstream.microphone_access()
-        self.rows["Microphone"].configure(text={
-            None: "-", "authorized": "Authorized",
-            "not determined": "Not asked yet: macOS asks when the capture starts",
-            "denied": f"Denied: allow {pdstream.microphone_app()} in Microphone settings, then reopen this app",
-            "restricted": "Restricted by a profile or parental controls"}[access])
-        if access in (None, "authorized"):
-            self.reopen.grid_remove()
-        else:
-            self.reopen.grid()
+        if self.reopen:
+            access = pdstream.microphone_access()
+            self.rows["Microphone"].configure(text={
+                None: "-", "authorized": "Authorized",
+                "not determined": "Not asked yet: macOS asks when the capture starts",
+                "denied": f"Denied: allow {pdstream.microphone_app()} in Microphone settings, then reopen this app",
+                "restricted": "Restricted by a profile or parental controls"}[access])
+            if access in (None, "authorized"):
+                self.reopen.grid_remove()
+            else:
+                self.reopen.grid()
 
         port = self.sink.port if self.sink and self.running() else None
         self.rows["Playdate"].configure(text=f"Connected on {port.port}" if port else "-" if not self.running() else

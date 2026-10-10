@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream Mac audio (BlackHole, or a WAV file) to PD Audio Monitor Receiver on a Playdate.
+"""Stream Mac or Windows audio (BlackHole, VB-Cable, or a WAV file) to PD Audio Monitor Receiver on a Playdate.
 
 Encodes in a Playdate audio format with shared/codec (built into libpdstream by `make`) and sends
 it over USB serial as `eval` commands: Lua bytecode that hands each packet to the receiver, which
@@ -20,6 +20,8 @@ import numpy as np
 RATE = 44100
 BLOCK = 1024
 PLAYDATE_VID = 0x1331
+# The virtual device whose output the host captures: BlackHole, or VB-Cable (its input is "CABLE Output").
+DEFAULT_DEVICE = "CABLE Output" if sys.platform == "win32" else "BlackHole"
 # The receiver logs this over USB when the user picks a format on the Playdate.
 FORMAT_REQUEST = re.compile(rb"pdstream format (\d+)")
 # Packet layout is in usb-stream/receiver/src/packet.h.
@@ -52,7 +54,7 @@ def eval_command(packet):
 def load_encoder():
     # A PyInstaller bundle unpacks the library next to its own files, in sys._MEIPASS.
     here = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-    for name in ("libpdstream.dylib", "libpdstream.so"):
+    for name in ("libpdstream.dylib", "libpdstream.so", "libpdstream.dll"):
         if (here / name).exists():
             lib = ctypes.CDLL(str(here / name))
             break
@@ -372,6 +374,23 @@ def request_microphone_access(stop=None):
     return granted[0]
 
 
+def input_devices():
+    """Input devices, once each: on Windows PortAudio lists every device under several host APIs, and
+    only WASAPI is used here."""
+    import sounddevice as sd
+
+    devices = [d for d in sd.query_devices() if d["max_input_channels"] > 0]
+    if sys.platform == "win32":
+        wasapi = [i for i, api in enumerate(sd.query_hostapis()) if api["name"] == "Windows WASAPI"]
+        devices = [d for d in devices if d["hostapi"] in wasapi] or devices
+    return devices
+
+
+def find_input(name):
+    wanted = name.lower()
+    return next((d for d in input_devices() if wanted in d["name"].lower()), None)
+
+
 def stream_device(name, codec, sink, stats, names, stop=None):
     import sounddevice as sd
 
@@ -388,19 +407,25 @@ def stream_device(name, codec, sink, stats, names, stop=None):
     if access in ("denied", "restricted"):
         sys.exit(f"Microphone access is {access}, so the capture would be silent. Allow {microphone_app()} under "
                  "System Settings → Privacy & Security → Microphone, then restart it.")
-    try:
-        info = sd.query_devices(name, "input")
-    except ValueError as error:
-        sys.exit(f"{error}\nInput devices:\n" + "\n".join(
-            f"  {d['name']}" for d in sd.query_devices() if d["max_input_channels"] > 0))
+    if sys.platform == "win32":
+        # WASAPI can't open a stream on a different thread than the one that initialised PortAudio, which
+        # the window's device list did; this also picks up devices added since.
+        sd._terminate()
+        sd._initialize()
+    info = find_input(name)
+    if info is None:
+        sys.exit(f"No input device matches {name!r}.\nInput devices:\n" + "\n".join(
+            f"  {d['name']}" for d in input_devices()))
     blocks = queue.Queue()
 
     def callback(frames, count, timing, status):
         blocks.put(to_mono(frames))
 
     channels = min(2, info["max_input_channels"])
+    # WASAPI shared mode only offers the mixer's rate; auto_convert resamples to RATE.
+    extra = sd.WasapiSettings(auto_convert=True) if sys.platform == "win32" else None
     with sd.InputStream(device=info["index"], channels=channels, samplerate=RATE, dtype="int16",
-                        blocksize=BLOCK, callback=callback):
+                        blocksize=BLOCK, callback=callback, extra_settings=extra):
         console.log(f"Capturing from {info['name']}")
         while stop is None or not stop.is_set():
             try:
@@ -422,7 +447,8 @@ def main():
                                      epilog="formats:\n" + "\n".join(f"  {i}  {n}" for i, n in enumerate(formats)))
     parser.add_argument("--format", type=int, default=lib.pdstream_default_format(),
                         help="format number, see below; the Playdate's d-pad switches it while streaming")
-    parser.add_argument("--device", default="BlackHole", help="input device name or part of it (default BlackHole)")
+    parser.add_argument("--device", default=DEFAULT_DEVICE,
+                        help=f"input device name or part of it (default {DEFAULT_DEVICE})")
     parser.add_argument("--input", type=Path, help="stream a 16-bit 44.1 kHz WAV file instead of a device")
     parser.add_argument("--port", help="serial port (default: the first Playdate found)")
     parser.add_argument("--out", type=Path, help="write what would go to the Playdate to a file")

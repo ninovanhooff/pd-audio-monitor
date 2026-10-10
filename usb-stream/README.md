@@ -2,7 +2,7 @@
 
 ![PD Audio Monitor Receiver on a Playdate, streaming from PD Audio Monitor Host on a Mac](../screenshots/pd-audio-monitor-banner.png)
 
-Plays Mac audio on the **Playdate's speaker** over the USB cable, encoded in a Playdate audio
+Plays Mac or Windows audio on the **Playdate's speaker** over the USB cable, encoded in a Playdate audio
 format. The signal stays digital end to end, so there's none of the analog noise of
 [`line-in-monitor`](../line-in-monitor/).
 
@@ -34,6 +34,28 @@ Needs an Apple Silicon Mac on macOS 26 or later and a Playdate.
    PD Audio Monitor Host: it finds the Playdate and starts streaming from BlackHole.
 8. Allow microphone access when macOS asks: that is how the host app hears BlackHole. Nothing is
    recorded from a microphone.
+
+### Windows
+
+Needs Windows 10 or later and a Playdate. The Playdate shows up as a COM port without a driver.
+
+1. Download `PD-Audio-Monitor-Host-…-windows-x64.zip` and `PDAudioMonitorReceiver-….pdx.zip` from
+   the latest release, and sideload the receiver as above.
+2. Install [VB-Cable](https://vb-audio.com/Cable/) and restart Windows.
+3. Send audio to **CABLE Input**, either as the system output or as your player's or DAW's output
+   device. To also hear it on the PC, tick *Listen to this device* on CABLE Output's properties
+   (Recording tab).
+4. Connect the Playdate over USB, unlock it, start PD Audio Monitor Receiver, then run
+   PD Audio Monitor Host. It isn't signed, so SmartScreen asks once: *More info → Run anyway*.
+
+To build it, install Python, MinGW-w64 gcc and `pip install numpy pyserial sounddevice pyinstaller`, then:
+
+```bash
+gcc -std=c11 -O2 -shared -static-libgcc -Ishared/codec -o usb-stream/host/libpdstream.dll usb-stream/host/encoder.c shared/codec/format_stream.c shared/codec/format_chain.c shared/codec/ima_adpcm.c
+cd usb-stream/host && python -m PyInstaller --noconfirm --workpath build/app --distpath dist host.spec
+```
+
+`pdstream.py --device` defaults to `CABLE Output` on Windows.
 
 The host app's Setup and Troubleshooting tabs repeat these steps and cover the usual problems.
 If the serial port is busy, quit the Playdate Simulator; it also talks to the device over USB.

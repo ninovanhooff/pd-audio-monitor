@@ -1,12 +1,17 @@
 CODEC = ../../shared/codec
-ifeq ($(shell uname),Darwin)
+SHARED = -fPIC
+ifeq ($(OS),Windows_NT)
+# MinGW-w64 exports every non-static symbol; -static-libgcc keeps libgcc_s_*.dll out of the way.
+LIB = libpdstream.dll
+SHARED = -static-libgcc
+else ifeq ($(shell uname),Darwin)
 LIB = libpdstream.dylib
 else
 LIB = libpdstream.so
 endif
 
 $(LIB): encoder.c $(CODEC)/format_stream.c $(CODEC)/format_chain.c $(CODEC)/ima_adpcm.c $(wildcard $(CODEC)/*.h)
-	$(CC) -std=c11 -O2 -Wall -Wextra -shared -fPIC -I$(CODEC) -o $@ $(filter %.c,$^) -lm
+	$(CC) -std=c11 -O2 -Wall -Wextra -shared $(SHARED) -I$(CODEC) -o $@ $(filter %.c,$^) -lm
 
 PYTHON ?= python3
 
@@ -28,6 +33,6 @@ build/app/stamp: pdstream.py pdstream_gui.py host.spec $(LIB) $(if $(wildcard di
 FORCE:
 
 clean:
-	rm -rf libpdstream.dylib libpdstream.so build dist
+	rm -rf libpdstream.dylib libpdstream.so libpdstream.dll build dist
 
 .PHONY: bundle app clean FORCE
