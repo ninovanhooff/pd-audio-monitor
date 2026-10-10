@@ -87,33 +87,77 @@ def to_mono(frames):
     return (frames.sum(axis=1) // frames.shape[1]).astype(np.int16)
 
 
-def find_port():
+def playdate_ports():
     from serial.tools import list_ports
 
     ports = [p.device for p in list_ports.comports() if p.vid == PLAYDATE_VID]
     # macOS lists each port as tty.* and cu.*; cu.* doesn't wait for carrier detect.
     ports.sort(key=lambda device: "/cu." not in device)
+    return ports
+
+
+def find_port():
+    ports = playdate_ports()
     if not ports:
         sys.exit("No Playdate found on USB. Plug it in and unlock it, or pass --port.")
     return ports[0]
 
 
 class SerialSink:
+    """Drops audio while the Playdate is unplugged or locked, and reopens the port when it returns."""
+
     def __init__(self, port, verbose):
         import serial
 
-        self.port = serial.Serial(port, 115200, timeout=0.2, write_timeout=5)
+        self.serial = serial
+        self.requested = port
         self.verbose = verbose
-        threading.Thread(target=self._drain, daemon=True).start()
+        self.port = None
+        self.retry_at = 0
+        self._open(port)
 
-    def _drain(self):
-        while True:
-            data = self.port.read(4096)
-            if data and self.verbose:
-                sys.stderr.write(data.decode(errors="replace"))
+    def _open(self, device):
+        self.port = self.serial.Serial(device, 115200, timeout=0.2, write_timeout=5)
+        threading.Thread(target=self._drain, args=(self.port,), daemon=True).start()
+
+    def _drain(self, port):
+        try:
+            while True:
+                data = port.read(4096)
+                if data and self.verbose:
+                    sys.stderr.write(data.decode(errors="replace"))
+        except (self.serial.SerialException, OSError, TypeError):
+            pass  # write() notices the lost port; closing it mid-read can raise TypeError
+
+    def _reconnect(self):
+        now = time.monotonic()
+        if now < self.retry_at:
+            return False
+        self.retry_at = now + 1
+        ports = [self.requested] if self.requested else playdate_ports()
+        if not ports:
+            return False
+        try:
+            self._open(ports[0])
+        except (self.serial.SerialException, OSError):
+            return False
+        sys.stderr.write(f"Playdate back on {ports[0]}\n")
+        return True
 
     def write(self, lines):
-        self.port.write(b"".join(lines))
+        if self.port is None and not self._reconnect():
+            return False
+        try:
+            self.port.write(b"".join(lines))
+            return True
+        except (self.serial.SerialException, OSError):
+            port, self.port = self.port, None
+            try:
+                port.close()
+            except (self.serial.SerialException, OSError):
+                pass
+            sys.stderr.write("\nPlaydate gone (unplugged or locked); waiting for it to come back\n")
+            return False
 
 
 class FileSink:
@@ -122,6 +166,7 @@ class FileSink:
 
     def write(self, lines):
         self.file.writelines(lines)
+        return True
 
 
 class Stats:
@@ -164,8 +209,8 @@ def stream_file(path, encoder, packetizer, sink, stats, paced):
         part = mono[offset:offset + BLOCK]
         last = offset + BLOCK >= len(mono)
         lines = packetizer.lines(encoder.encode(part), flush=last)
-        sink.write(lines)
-        stats.add(part, lines)
+        sent = sink.write(lines)
+        stats.add(part, lines if sent else [])
         if paced:
             delay = start + (offset + BLOCK) / RATE - time.monotonic()
             if delay > 0:
@@ -192,8 +237,8 @@ def stream_device(name, encoder, packetizer, sink, stats):
         while True:
             mono = blocks.get()
             lines = packetizer.lines(encoder.encode(mono))
-            sink.write(lines)
-            stats.add(mono, lines)
+            sent = sink.write(lines)
+            stats.add(mono, lines if sent else [])
             if blocks.qsize() > 20:
                 sys.stderr.write("\nFalling behind: the serial link is slower than this format needs.\n")
 
