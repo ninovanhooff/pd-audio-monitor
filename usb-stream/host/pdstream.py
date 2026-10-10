@@ -296,7 +296,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
                                      epilog="formats:\n" + "\n".join(f"  {i}  {n}" for i, n in enumerate(formats)))
     parser.add_argument("--format", type=int, default=lib.pdstream_default_format(),
-                        help="format number, see below; ⬆/⬇ on the Playdate switch it while streaming")
+                        help="format number, see below; the Playdate's d-pad switches it while streaming")
     parser.add_argument("--device", default="BlackHole", help="input device name or part of it (default BlackHole)")
     parser.add_argument("--input", type=Path, help="stream a 16-bit 44.1 kHz WAV file instead of a device")
     parser.add_argument("--port", help="serial port (default: the first Playdate found)")

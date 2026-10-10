@@ -45,7 +45,7 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 
 | Row | Shows |
 | --- | --- |
-| Format ⬆⬇ | Format of the incoming stream. ⬆/⬇ ask `pdstream.py` to switch (shown with `...` until it does); `--format` sets the starting one |
+| Format ✛ | Format of the incoming stream. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM); the Playdate asks `pdstream.py` to switch and shows `...` until it does. A rate without the current codec gets the nearest one it has. `--format` sets the starting format |
 | Output Ⓑ | Speaker / headphones / both |
 | Link | Messages and bytes per second arriving |
 | Buffer | Audio queued. Playback starts at 150 ms; above 400 ms it drops back to 150 ms (clock drift). |
@@ -65,7 +65,7 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 | 6 | 11.025 kHz 8-bit | 62 | 15 |
 
 A Playdate takes about 390 messages a second (measured with the bypass format), so the bypass
-can't be streamed: `pdstream.py` refuses it and ⬆/⬇ skip it. The other formats play on a Playdate.
+can't be streamed: `pdstream.py` refuses it and the d-pad skips it. The other formats play on a Playdate.
 
 ## Protocol
 

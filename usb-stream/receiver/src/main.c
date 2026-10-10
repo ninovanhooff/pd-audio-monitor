@@ -149,12 +149,39 @@ static void requestFormat(void) {
     ui.lastRequestMs = now;
 }
 
-static void stepFormat(int step) {
+// The formats as a grid: sample rate rises to the right, bits per sample rise upward.
+static int rateRank(int format) {
+    int divisor = chain_formats[format].divisor;
+    return divisor == 1 ? 2 : divisor == 2 ? 1 : 0;
+}
+
+static int codecRank(int format) {
+    ChainCodec codec = chain_formats[format].codec;
+    return codec == CODEC_PCM16 ? 2 : codec == CODEC_PCM8 ? 1 : 0;
+}
+
+// Not every rate has every codec: a rate step lands on the nearest codec that rate has, and a codec
+// step goes to the next one the rate has, staying put at either end.
+static void stepFormat(int rateStep, int codecStep) {
     int current = ui.wantedFormat >= 0 ? ui.wantedFormat : receiver.format >= 0 ? receiver.format : chain_default_format;
-    do {
-        current = (current + step + chain_format_count) % chain_format_count;
-    } while (current == PACKET_UNSTREAMABLE_FORMAT);
-    ui.wantedFormat = current;
+    int rate = rateRank(current) + rateStep, codec = codecRank(current);
+    int best = -1, bestDistance = 0;
+    for (int format = 0; format < chain_format_count; format++) {
+        if (format == PACKET_UNSTREAMABLE_FORMAT || rateRank(format) != rate) continue;
+        int distance = codecRank(format) - codec;
+        if (codecStep) {
+            distance *= codecStep;
+            if (distance <= 0) continue;
+        } else {
+            distance = distance < 0 ? -distance * 2 : distance * 2 + 1; // on a tie, the lighter codec
+        }
+        if (best < 0 || distance < bestDistance) {
+            best = format;
+            bestDistance = distance;
+        }
+    }
+    if (best < 0) return;
+    ui.wantedFormat = best;
     ui.lastRequestMs = pd->system->getCurrentTimeMilliseconds() - 1000;
 }
 
@@ -165,8 +192,10 @@ static void handleInput(void) {
         ui.output = (Output)((ui.output + 1) % OUTPUT_COUNT);
         applyOutput();
     }
-    if (pushed & kButtonUp) stepFormat(-1);
-    if (pushed & kButtonDown) stepFormat(1);
+    if (pushed & kButtonLeft) stepFormat(-1, 0);
+    if (pushed & kButtonRight) stepFormat(1, 0);
+    if (pushed & kButtonUp) stepFormat(0, 1);
+    if (pushed & kButtonDown) stepFormat(0, -1);
 }
 
 static void updateRates(void) {
@@ -256,9 +285,9 @@ static int update(void* userdata) {
     pd->graphics->clear(kColorWhite);
     drawString(fonts.label, "USB stream", 12, 8);
     if (ui.wantedFormat >= 0 && ui.wantedFormat != receiver.format) {
-        drawRow(40, "Format", "⬆⬇", "%s ...", chain_formats[ui.wantedFormat].name);
+        drawRow(40, "Format", "✛", "%s ...", chain_formats[ui.wantedFormat].name);
     } else {
-        drawRow(40, "Format", "⬆⬇", "%s", isReceiving() ? chain_formats[receiver.format].name : "waiting for the Mac");
+        drawRow(40, "Format", "✛", "%s", isReceiving() ? chain_formats[receiver.format].name : "waiting for the Mac");
     }
     drawRow(64, "Output", "Ⓑ", "%s", outputNames[ui.output]);
     int kbTenths = ui.bytesPerSecond / 100;
