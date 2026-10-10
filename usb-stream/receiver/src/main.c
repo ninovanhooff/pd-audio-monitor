@@ -41,6 +41,7 @@ static struct {
     Output output;
     int wantedFormat;
     unsigned int lastRequestMs;
+    unsigned int matchedSinceMs;
     int peak;
     int clipped;
     float meterDb;
@@ -174,11 +175,17 @@ static int isReceiving(void) {
 
 // The console goes out over USB, where pdstream.py picks the request up. Repeated until the stream
 // switches, since pdstream.py may not be listening yet (or anymore); after that the host may pick
-// another format.
+// another format. Packets of the old format still queued on the link can flip the stream back, so the
+// request stays until the stream has held the new format for a while.
 static void requestFormat(void) {
     unsigned int now = pd->system->getCurrentTimeMilliseconds();
-    if (ui.wantedFormat == receiver.format) ui.wantedFormat = -1;
-    if (ui.wantedFormat < 0 || now - ui.lastRequestMs < 1000) return;
+    if (ui.wantedFormat >= 0 && ui.wantedFormat == receiver.format) {
+        if (ui.matchedSinceMs == 0) ui.matchedSinceMs = now;
+        if (now - ui.matchedSinceMs > 1500) ui.wantedFormat = -1;
+    } else {
+        ui.matchedSinceMs = 0;
+    }
+    if (ui.wantedFormat < 0 || ui.wantedFormat == receiver.format || now - ui.lastRequestMs < 1000) return;
     pd->system->logToConsole("pdstream format %d", ui.wantedFormat);
     ui.lastRequestMs = now;
 }
