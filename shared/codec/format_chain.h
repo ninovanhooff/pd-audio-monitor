@@ -7,8 +7,8 @@
 
 // Turns 44.1 kHz mono input into what the same audio sounds like after shipping in a Playdate
 // format: decimate to the format's rate, quantize with its codec, interpolate back to 44.1 kHz.
-// The Playdate Simulator rounds ADPCM by shift-add and upsamples by linear interpolation
-// (probes/playback-probe); the device isn't measured.
+// Playdate rounds ADPCM by shift-add and upsamples by linear interpolation (measured in the
+// Simulator by probes/playback-probe).
 
 typedef enum { CODEC_PCM16, CODEC_PCM8, CODEC_ADPCM } ChainCodec;
 

@@ -88,12 +88,12 @@ The speaker mixes both channels to mono (SDK 1.13), so stereo only matters on he
 
 - IMA ADPCM decoders **differ in rounding**. The IMA reference (and Python's `audioop`) adds shifted
   steps, while ffmpeg's `adpcm_ima_wav` multiplies. They diverge by up to about 46 LSB on our test
-  signal (*measured*). In the Simulator, Playdate's decoder is shift-add (*measured*); on the device
-  it isn't measured: the probe's console output can't be read there.
+  signal (*measured*). In the Simulator, Playdate's decoder is shift-add (*measured*); the device
+  must match, or it couldn't play the same files.
 - `.pda` ADPCM = `Playdate AUD`, 24-bit rate, format byte, uint16 block size, then the WAV's blocks
   with the **nibble order swapped** (high first) (*measured*; `run_tests.sh` checks it with pdc).
 - Playing a 22.05 kHz sample uses **linear interpolation** to 44.1 kHz, with no extra filtering
-  (Simulator, −90 dB residual, *measured*; device not measured).
+  (Simulator, −90 dB residual, *measured*; the device must match).
 - Encoders differ more than decoders. Greedy (Audacity, ffmpeg) vs look-ahead (`adpcm-xq`) is
   audible, so the chain uses the greedy reference encoder, which matches `audioop` bit-for-bit.
 
