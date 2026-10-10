@@ -1,12 +1,12 @@
 // Host harness: pdstream.py's eval commands on stdin -> the receiver's packet decoding -> 44.1 kHz
-// s16le on stdout. Prints packet counts to stderr.
+// interleaved s16le on stdout. Prints packet counts to stderr.
 #include <stdio.h>
 
 #include "packet.h"
 
-static void emit(void* context, const int16_t* samples, int count) {
+static void emit(void* context, const int16_t* frames, int count, int channels) {
     (void)context;
-    fwrite(samples, sizeof(int16_t), (size_t)count, stdout);
+    fwrite(frames, sizeof(int16_t), (size_t)(count * channels), stdout);
 }
 
 int main(void) {

@@ -1,4 +1,4 @@
-// Host tool: 44.1 kHz mono s16le stdin -> stream encoder -> stream decoder -> stdout, to check that the
+// Host tool: 44.1 kHz s16le stdin (interleaved for stereo formats) -> stream encoder -> stream decoder -> stdout, to check that the
 // split chain matches chain_render.
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,13 +18,14 @@ int main(int argc, char** argv) {
     stream_encoder_init(&encoder, &chain_formats[index]);
     stream_decoder_init(&decoder, &chain_formats[index]);
     static uint8_t unit[STREAM_MAX_UNIT_BYTES];
-    static int16_t out[STREAM_MAX_OUTPUT];
-    int16_t sample;
-    while (fread(&sample, sizeof(sample), 1, stdin) == 1) {
-        int bytes = stream_encode(&encoder, sample, unit);
+    static int16_t out[STREAM_MAX_OUTPUT * STREAM_MAX_CHANNELS];
+    int channels = chain_formats[index].channels;
+    int16_t frame[STREAM_MAX_CHANNELS];
+    while (fread(frame, sizeof(int16_t), (size_t)channels, stdin) == (size_t)channels) {
+        int bytes = stream_encode(&encoder, frame, unit);
         for (int i = 0; i < bytes; i++) {
             int count = stream_decode(&decoder, unit[i], out);
-            fwrite(out, sizeof(int16_t), (size_t)count, stdout);
+            fwrite(out, sizeof(int16_t), (size_t)(count * channels), stdout);
         }
     }
     return 0;

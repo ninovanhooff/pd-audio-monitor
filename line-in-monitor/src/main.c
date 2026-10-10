@@ -156,8 +156,8 @@ static void handleInput(void) {
     PDButtons pushed;
     pd->system->getButtonState(NULL, &pushed, NULL);
 
-    if (pushed & kButtonRight) ui.format = (ui.format + 1) % chain_format_count;
-    if (pushed & kButtonLeft) ui.format = (ui.format + chain_format_count - 1) % chain_format_count;
+    if (pushed & kButtonRight) ui.format = (ui.format + 1) % chain_mono_format_count;
+    if (pushed & kButtonLeft) ui.format = (ui.format + chain_mono_format_count - 1) % chain_mono_format_count;
     if (pushed & kButtonA) ui.compare = !ui.compare;
     if (pushed & (kButtonLeft | kButtonRight | kButtonA)) applyFormat();
 
@@ -263,7 +263,7 @@ static int update(void* userdata) {
 
     int tenths = (int)lrintf(ui.gainDb * 10.0f);
     int magnitude = tenths < 0 ? -tenths : tenths;
-    drawRow(40, "Format", "⬅ ➡", "%s", chain_formats[ui.format].name);
+    drawRow(40, "Format", "⬅ ➡", "%s", chain_formats[ui.format].deviceName);
     drawRow(64, "Compare", "Ⓐ", "%s", ui.compare ? "playing bypass" : "off");
     drawRow(88, "Output", "Ⓑ", "%s", outputNames[ui.output]);
     drawRow(112, "Gain", "⬆ ⬇ 🎣", "%c%d.%d dB", tenths < 0 ? '-' : '+', magnitude / 10, magnitude % 10);

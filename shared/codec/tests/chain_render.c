@@ -1,4 +1,4 @@
-// Host tool: run 44.1 kHz mono s16le stdin through a format chain to stdout, to test the chain
+// Host tool: run 44.1 kHz s16le stdin (interleaved for stereo formats) through a format chain to stdout, to test the chain
 // and to preview a mix on the Mac exactly as the line-in monitor degrades it.
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,12 +15,13 @@ int main(int argc, char** argv) {
     int index = atoi(argv[1]);
     if (index < 0 || index >= chain_format_count) return 64;
 
-    static FormatChain chain;
-    chain_init(&chain, &chain_formats[index]);
+    int channels = chain_formats[index].channels;
+    static FormatChain chains[2];
+    for (int c = 0; c < channels; c++) chain_init(&chains[c], &chain_formats[index]);
     int16_t buffer[4096];
     size_t count;
     while ((count = fread(buffer, sizeof(int16_t), 4096, stdin)) > 0) {
-        for (size_t i = 0; i < count; i++) buffer[i] = chain_process(&chain, buffer[i]);
+        for (size_t i = 0; i < count; i++) buffer[i] = chain_process(&chains[i % (size_t)channels], buffer[i]);
         fwrite(buffer, sizeof(int16_t), count, stdout);
     }
     return 0;

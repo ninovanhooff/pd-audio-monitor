@@ -130,7 +130,8 @@ def gain_db(fmt, freq):
 
 
 # Divisor per format, as in format_chain.c.
-FORMATS = [1, 1, 1, 2, 2, 2, 4, 4, 4]
+FORMATS = [1, 1, 1, 2, 2, 2, 4, 4, 4, 1, 1, 2, 2, 2, 4, 4, 4]
+MONO_FORMATS = 9
 
 passthrough = tone(1000, 0.2)
 check("format 0 (bypass) is the identity", render(0, passthrough) == passthrough)
@@ -143,14 +144,42 @@ for fmt, name, nyquist in [(3, "22.05 kHz ADPCM", 11025), (5, "22.05 kHz 16-bit"
 # 5. The chain split across a link (sender encodes, receiver decodes) matches the whole chain.
 random.seed(2)
 mix = [int(0.6 * a + b) for a, b in zip(tone(440, 1.0), [random.randint(-6000, 6000) for _ in range(RATE)])]
-for fmt in range(len(FORMATS)):
-    whole = render(fmt, mix)
-    out = subprocess.run([build / "stream_render", str(fmt)], input=struct.pack(f"<{len(mix)}h", *mix),
+other = [int(0.5 * a + b) for a, b in zip(tone(1234, 1.0), [random.randint(-4000, 4000) for _ in range(RATE)])]
+
+
+def interleave(left, right):
+    out = [0] * (2 * len(left))
+    out[0::2] = left
+    out[1::2] = right
+    return out
+
+
+def stream(fmt, samples):
+    out = subprocess.run([build / "stream_render", str(fmt)], input=struct.pack(f"<{len(samples)}h", *samples),
                          capture_output=True, check=True).stdout
-    split = list(struct.unpack(f"<{len(out) // 2}h", out))
-    delay = FORMATS[fmt] - 1
+    return list(struct.unpack(f"<{len(out) // 2}h", out))
+
+
+for fmt in range(len(FORMATS)):
+    channels = 1 if fmt < MONO_FORMATS else 2
+    signal_in = mix if channels == 1 else interleave(mix, other)
+    whole = render(fmt, signal_in)
+    split = stream(fmt, signal_in)
+    delay = (FORMATS[fmt] - 1) * channels
     n = min(len(split), len(whole) - delay)
-    check(f"format {fmt}: stream encode + decode matches the chain", n > RATE * 0.9 and
+    check(f"format {fmt}: stream encode + decode matches the chain", n > RATE * 0.9 * channels and
           split[:n] == whole[delay:delay + n], f"{n} samples")
+
+# 6. Stereo channels are independent.
+silence = [0] * len(mix)
+for fmt in range(MONO_FORMATS, len(FORMATS)):
+    for name, run in (("chain", lambda x: render(fmt, x)), ("stream", lambda x: stream(fmt, x))):
+        right_silent = run(interleave(mix, silence))
+        both = run(interleave(mix, other))
+        left_silent = run(interleave(silence, other))
+        n = min(len(right_silent), len(both), len(left_silent))
+        check(f"format {fmt}: {name} channels are independent",
+              not any(right_silent[1:n:2]) and not any(left_silent[0:n:2]) and
+              right_silent[0:n:2] == both[0:n:2] and left_silent[1:n:2] == both[1:n:2], f"{n // 2} frames")
 
 sys.exit(1 if failures else 0)

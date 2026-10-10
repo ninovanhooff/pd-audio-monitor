@@ -34,7 +34,7 @@ int packet_receive(PacketReceiver* receiver, const uint8_t* packet, int length, 
             continue;
         }
         int count = stream_decode(&receiver->decoder, packet[i], receiver->output);
-        if (count > 0) emit(context, receiver->output, count);
+        if (count > 0) emit(context, receiver->output, count, format->channels);
     }
     return 1;
 }

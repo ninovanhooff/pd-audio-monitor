@@ -12,15 +12,21 @@
 
 typedef enum { CODEC_PCM16, CODEC_PCM8, CODEC_ADPCM } ChainCodec;
 
+// name is for the host, deviceName for the Playdate's small screen. A stereo format runs one chain per
+// channel; chain_process and the rest of this header handle a single channel.
 typedef struct {
     const char* name;
+    const char* deviceName;
     int divisor;
     ChainCodec codec;
     int samplesPerBlock;
+    int channels;
 } ChainFormat;
 
+// Mono formats come first. No 44.1 kHz 16-bit stereo: it needs twice the USB link's capacity.
 extern const ChainFormat chain_formats[];
 extern const int chain_format_count;
+extern const int chain_mono_format_count;
 extern const int chain_default_format;
 
 #define CHAIN_MAX_TAPS 127

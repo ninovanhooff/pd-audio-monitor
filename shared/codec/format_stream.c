@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-int stream_unit_bytes(const ChainFormat* format) {
+static int channel_unit_bytes(const ChainFormat* format) {
     switch (format->codec) {
     case CODEC_PCM16:
         return 2;
@@ -14,6 +14,10 @@ int stream_unit_bytes(const ChainFormat* format) {
     return 1;
 }
 
+int stream_unit_bytes(const ChainFormat* format) {
+    return format->channels * channel_unit_bytes(format);
+}
+
 static int16_t clamp16(int32_t value) {
     if (value > 32767) return 32767;
     if (value < -32768) return -32768;
@@ -21,29 +25,36 @@ static int16_t clamp16(int32_t value) {
 }
 
 void stream_encoder_init(StreamEncoder* encoder, const ChainFormat* format) {
-    chain_init(&encoder->chain, format);
+    for (int c = 0; c < format->channels; c++) chain_init(&encoder->chains[c], format);
     encoder->count = 0;
 }
 
-int stream_encode(StreamEncoder* encoder, int16_t input, uint8_t* out) {
-    int16_t sample;
-    if (!chain_decimate(&encoder->chain, input, &sample)) return 0;
+int stream_encode(StreamEncoder* encoder, const int16_t* frame, uint8_t* out) {
+    const ChainFormat* format = encoder->chains[0].format;
+    int16_t sample[STREAM_MAX_CHANNELS];
+    int ready = 0;
+    for (int c = 0; c < format->channels; c++) ready = chain_decimate(&encoder->chains[c], frame[c], &sample[c]);
+    if (!ready) return 0;
 
-    const ChainFormat* format = encoder->chain.format;
+    int size = 0;
     switch (format->codec) {
     case CODEC_PCM16:
-        out[0] = (uint8_t)(sample & 0xff);
-        out[1] = (uint8_t)((uint16_t)sample >> 8);
-        return 2;
+        for (int c = 0; c < format->channels; c++) {
+            out[size++] = (uint8_t)(sample[c] & 0xff);
+            out[size++] = (uint8_t)((uint16_t)sample[c] >> 8);
+        }
+        return size;
     case CODEC_PCM8:
-        out[0] = (uint8_t)(clamp16(sample + 128) >> 8);
-        return 1;
+        for (int c = 0; c < format->channels; c++) out[size++] = (uint8_t)(clamp16(sample[c] + 128) >> 8);
+        return size;
     case CODEC_ADPCM:
-        encoder->block[encoder->count++] = sample;
-        if (encoder->count < format->samplesPerBlock) return 0;
+        for (int c = 0; c < format->channels; c++) encoder->block[c][encoder->count] = sample[c];
+        if (++encoder->count < format->samplesPerBlock) return 0;
         encoder->count = 0;
-        return ima_adpcm_encode_block(&encoder->chain.adpcm, encoder->block, format->samplesPerBlock,
-                                      IMA_LAYOUT_WAV, out);
+        for (int c = 0; c < format->channels; c++)
+            size += ima_adpcm_encode_block(&encoder->chains[c].adpcm, encoder->block[c], format->samplesPerBlock,
+                                           IMA_LAYOUT_WAV, out + size);
+        return size;
     }
     return 0;
 }
@@ -57,22 +68,27 @@ void stream_decoder_resync(StreamDecoder* decoder) {
     decoder->fill = 0;
 }
 
-static int interpolate(StreamDecoder* decoder, const int16_t* samples, int count, int16_t* out) {
-    const int divisor = decoder->format->divisor;
+// Interpolates decoded[][0..count) up to 44.1 kHz into interleaved frames.
+static int interpolate(StreamDecoder* decoder, int count, int16_t* out) {
+    const int divisor = decoder->format->divisor, channels = decoder->format->channels;
     int written = 0;
     for (int i = 0; i < count; i++) {
-        decoder->previous = decoder->current;
-        decoder->current = samples[i];
+        for (int c = 0; c < channels; c++) {
+            decoder->previous[c] = decoder->current[c];
+            decoder->current[c] = decoder->decoded[c][i];
+        }
         if (divisor == 1) {
-            out[written++] = decoder->current;
+            for (int c = 0; c < channels; c++) out[written++] = decoder->current[c];
             continue;
         }
-        int32_t step = decoder->current - decoder->previous;
         for (int phase = 0; phase < divisor; phase++) {
-            out[written++] = (int16_t)(decoder->previous + step * phase / divisor);
+            for (int c = 0; c < channels; c++) {
+                int32_t step = decoder->current[c] - decoder->previous[c];
+                out[written++] = (int16_t)(decoder->previous[c] + step * phase / divisor);
+            }
         }
     }
-    return written;
+    return written / channels;
 }
 
 int stream_decode(StreamDecoder* decoder, uint8_t byte, int16_t* out) {
@@ -81,17 +97,22 @@ int stream_decode(StreamDecoder* decoder, uint8_t byte, int16_t* out) {
     if (decoder->fill < stream_unit_bytes(format)) return 0;
     decoder->fill = 0;
 
-    switch (format->codec) {
-    case CODEC_PCM16:
-        decoder->decoded[0] = (int16_t)(decoder->unit[0] | decoder->unit[1] << 8);
-        return interpolate(decoder, decoder->decoded, 1, out);
-    case CODEC_PCM8:
-        decoder->decoded[0] = (int16_t)((int8_t)decoder->unit[0] * 256);
-        return interpolate(decoder, decoder->decoded, 1, out);
-    case CODEC_ADPCM:
-        ima_adpcm_decode_block(decoder->unit, format->samplesPerBlock, IMA_ROUNDING_SHIFT_ADD, IMA_LAYOUT_WAV,
-                               decoder->decoded);
-        return interpolate(decoder, decoder->decoded, format->samplesPerBlock, out);
+    int samples = 1;
+    for (int c = 0; c < format->channels; c++) {
+        const uint8_t* unit = decoder->unit + c * channel_unit_bytes(format);
+        switch (format->codec) {
+        case CODEC_PCM16:
+            decoder->decoded[c][0] = (int16_t)(unit[0] | unit[1] << 8);
+            break;
+        case CODEC_PCM8:
+            decoder->decoded[c][0] = (int16_t)((int8_t)unit[0] * 256);
+            break;
+        case CODEC_ADPCM:
+            ima_adpcm_decode_block(unit, format->samplesPerBlock, IMA_ROUNDING_SHIFT_ADD, IMA_LAYOUT_WAV,
+                                   decoder->decoded[c]);
+            samples = format->samplesPerBlock;
+            break;
+        }
     }
-    return 0;
+    return interpolate(decoder, samples, out);
 }

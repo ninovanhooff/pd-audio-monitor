@@ -14,11 +14,17 @@ void pdstream_free(StreamEncoder* encoder) {
     free(encoder);
 }
 
-// out needs room for 2 * count + STREAM_MAX_UNIT_BYTES bytes.
+// samples holds count interleaved frames of the format's channels; out needs room for
+// count * 2 * channels + STREAM_MAX_UNIT_BYTES bytes.
 int pdstream_encode(StreamEncoder* encoder, const int16_t* samples, int count, uint8_t* out) {
+    int channels = encoder->chains[0].format->channels;
     int written = 0;
-    for (int i = 0; i < count; i++) written += stream_encode(encoder, samples[i], out + written);
+    for (int i = 0; i < count; i++) written += stream_encode(encoder, samples + i * channels, out + written);
     return written;
+}
+
+int pdstream_format_channels(int format) {
+    return chain_formats[format].channels;
 }
 
 int pdstream_unit_bytes(int format) {

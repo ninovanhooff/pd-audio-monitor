@@ -22,7 +22,8 @@ static struct {
 #define REPLAY_FILL 8820
 #define REPLAY_MAX_COMMAND 2048
 
-static volatile int16_t ring[RING_SIZE];
+static volatile int16_t ringLeft[RING_SIZE];
+static volatile int16_t ringRight[RING_SIZE];
 static volatile uint32_t writePos;
 static volatile uint32_t readPos;
 static volatile int primed;
@@ -55,20 +56,26 @@ static struct {
     unsigned int lastPacketMs;
 } ui;
 
-static void emitSamples(void* context, const int16_t* samples, int count) {
+static void trackLevel(int16_t sample) {
+    if (sample == 32767 || sample == -32768) ui.clipped = 1;
+    int magnitude = sample < 0 ? -sample : sample;
+    if (magnitude > ui.peak) ui.peak = magnitude;
+}
+
+static void emitFrames(void* context, const int16_t* frames, int count, int channels) {
     (void)context;
     for (int i = 0; i < count; i++) {
-        int16_t sample = samples[i];
-        if (sample == 32767 || sample == -32768) ui.clipped = 1;
-        int magnitude = sample < 0 ? -sample : sample;
-        if (magnitude > ui.peak) ui.peak = magnitude;
-        ring[writePos & RING_MASK] = sample;
+        int16_t left = frames[i * channels], right = frames[i * channels + channels - 1];
+        trackLevel(left);
+        trackLevel(right);
+        ringLeft[writePos & RING_MASK] = left;
+        ringRight[writePos & RING_MASK] = right;
         writePos++;
     }
 }
 
 static void receive(const uint8_t* packet, int length) {
-    if (packet_receive(&receiver, packet, length, emitSamples, NULL))
+    if (packet_receive(&receiver, packet, length, emitFrames, NULL))
         ui.lastPacketMs = pd->system->getCurrentTimeMilliseconds();
 }
 
@@ -82,12 +89,13 @@ static int feed(lua_State* L) {
 }
 
 static int sourceCallback(void* context, int16_t* left, int16_t* right, int len) {
-    (void)context, (void)right;
+    (void)context;
     uint32_t fill = writePos - readPos;
 
     if (!primed) {
         if (fill < PRIME_FILL) {
             memset(left, 0, (size_t)len * sizeof(int16_t));
+            memset(right, 0, (size_t)len * sizeof(int16_t));
             return 0;
         }
         primed = 1;
@@ -100,10 +108,11 @@ static int sourceCallback(void* context, int16_t* left, int16_t* right, int len)
     int starved = 0;
     for (int i = 0; i < len; i++) {
         if (readPos != writePos) {
-            left[i] = ring[readPos & RING_MASK];
+            left[i] = ringLeft[readPos & RING_MASK];
+            right[i] = ringRight[readPos & RING_MASK];
             readPos++;
         } else {
-            left[i] = 0;
+            left[i] = right[i] = 0;
             starved = 1;
         }
     }
@@ -174,7 +183,8 @@ static void requestFormat(void) {
     ui.lastRequestMs = now;
 }
 
-// The formats as a grid: sample rate rises to the right, bits per sample rise upward.
+// The formats as a grid: sample rate rises to the right, bits per sample rise upward; each cell has a
+// mono and a stereo format, except 44.1 kHz 16-bit stereo.
 static int rateRank(int format) {
     int divisor = chain_formats[format].divisor;
     return divisor == 1 ? 2 : divisor == 2 ? 1 : 0;
@@ -185,16 +195,29 @@ static int codecRank(int format) {
     return codec == CODEC_PCM16 ? 2 : codec == CODEC_PCM8 ? 1 : 0;
 }
 
-// Both wrap around.
-static void stepFormat(int rateStep, int codecStep) {
-    int current = ui.wantedFormat >= 0 ? ui.wantedFormat : receiver.format >= 0 ? receiver.format : chain_default_format;
-    int rate = (rateRank(current) + rateStep + 3) % 3, codec = (codecRank(current) + codecStep + 3) % 3;
+static int findFormat(int rate, int codec, int channels) {
     for (int format = 0; format < chain_format_count; format++) {
-        if (rateRank(format) == rate && codecRank(format) == codec) {
-            ui.wantedFormat = format;
-            ui.lastRequestMs = pd->system->getCurrentTimeMilliseconds() - 1000;
-        }
+        if (rateRank(format) == rate && codecRank(format) == codec && chain_formats[format].channels == channels)
+            return format;
     }
+    return -1;
+}
+
+// Rate and codec wrap around, skipping combinations that don't exist; channelsToggle switches mono/stereo.
+static void stepFormat(int rateStep, int codecStep, int channelsToggle) {
+    int current = ui.wantedFormat >= 0 ? ui.wantedFormat : receiver.format >= 0 ? receiver.format : chain_default_format;
+    int rate = rateRank(current), codec = codecRank(current), channels = chain_formats[current].channels;
+    if (channelsToggle) channels = 3 - channels;
+    int found = -1;
+    for (int tries = 0; tries < 3 && found < 0; tries++) {
+        rate = (rate + rateStep + 3) % 3;
+        codec = (codec + codecStep + 3) % 3;
+        found = findFormat(rate, codec, channels);
+        if (!rateStep && !codecStep) break;
+    }
+    if (found < 0) return;
+    ui.wantedFormat = found;
+    ui.lastRequestMs = pd->system->getCurrentTimeMilliseconds() - 1000;
 }
 
 static void handleInput(void) {
@@ -204,10 +227,11 @@ static void handleInput(void) {
         ui.output = (Output)((ui.output + 1) % OUTPUT_COUNT);
         applyOutput();
     }
-    if (pushed & kButtonLeft) stepFormat(-1, 0);
-    if (pushed & kButtonRight) stepFormat(1, 0);
-    if (pushed & kButtonUp) stepFormat(0, 1);
-    if (pushed & kButtonDown) stepFormat(0, -1);
+    if (pushed & kButtonLeft) stepFormat(-1, 0, 0);
+    if (pushed & kButtonRight) stepFormat(1, 0, 0);
+    if (pushed & kButtonUp) stepFormat(0, 1, 0);
+    if (pushed & kButtonA) stepFormat(0, 0, 1);
+    if (pushed & kButtonDown) stepFormat(0, -1, 0);
 }
 
 static void updateRates(void) {
@@ -297,9 +321,9 @@ static int update(void* userdata) {
     pd->graphics->clear(kColorWhite);
     drawString(fonts.label, "PD Audio Monitor Receiver", 12, 8);
     if (ui.wantedFormat >= 0 && ui.wantedFormat != receiver.format) {
-        drawRow(40, "Format", "✛", "%s ...", chain_formats[ui.wantedFormat].name);
+        drawRow(40, "Format", "✛Ⓐ", "%s ...", chain_formats[ui.wantedFormat].deviceName);
     } else {
-        drawRow(40, "Format", "✛", "%s", isReceiving() ? chain_formats[receiver.format].name : "waiting for the host");
+        drawRow(40, "Format", "✛Ⓐ", "%s", isReceiving() ? chain_formats[receiver.format].deviceName : "waiting for the host");
     }
     drawRow(64, "Output", "Ⓑ", "%s", outputNames[ui.output]);
     int kbTenths = ui.bytesPerSecond / 100;

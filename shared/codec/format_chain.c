@@ -6,17 +6,26 @@
 // samplesPerBlock follows libsndfile (and so Audacity): 256/512/1024-byte blocks below 12 kHz,
 // below 23 kHz and above.
 const ChainFormat chain_formats[] = {
-    {"44.1 kHz 16-bit (bypass)", 1, CODEC_PCM16, 0},
-    {"44.1 kHz 8-bit", 1, CODEC_PCM8, 0},
-    {"44.1 kHz IMA ADPCM", 1, CODEC_ADPCM, 2041},
-    {"22.05 kHz 16-bit", 2, CODEC_PCM16, 0},
-    {"22.05 kHz 8-bit", 2, CODEC_PCM8, 0},
-    {"22.05 kHz IMA ADPCM", 2, CODEC_ADPCM, 1017},
-    {"11.025 kHz 16-bit", 4, CODEC_PCM16, 0},
-    {"11.025 kHz 8-bit", 4, CODEC_PCM8, 0},
-    {"11.025 kHz IMA ADPCM", 4, CODEC_ADPCM, 505},
+    {"44.1 kHz 16-bit mono (bypass)", "44kHz 16bit 1ch (bypass)", 1, CODEC_PCM16, 0, 1},
+    {"44.1 kHz 8-bit mono", "44kHz 8bit 1ch", 1, CODEC_PCM8, 0, 1},
+    {"44.1 kHz IMA ADPCM mono", "44kHz ADPCM 1ch", 1, CODEC_ADPCM, 2041, 1},
+    {"22.05 kHz 16-bit mono", "22kHz 16bit 1ch", 2, CODEC_PCM16, 0, 1},
+    {"22.05 kHz 8-bit mono", "22kHz 8bit 1ch", 2, CODEC_PCM8, 0, 1},
+    {"22.05 kHz IMA ADPCM mono", "22kHz ADPCM 1ch", 2, CODEC_ADPCM, 1017, 1},
+    {"11.025 kHz 16-bit mono", "11kHz 16bit 1ch", 4, CODEC_PCM16, 0, 1},
+    {"11.025 kHz 8-bit mono", "11kHz 8bit 1ch", 4, CODEC_PCM8, 0, 1},
+    {"11.025 kHz IMA ADPCM mono", "11kHz ADPCM 1ch", 4, CODEC_ADPCM, 505, 1},
+    {"44.1 kHz 8-bit stereo", "44kHz 8bit 2ch", 1, CODEC_PCM8, 0, 2},
+    {"44.1 kHz IMA ADPCM stereo", "44kHz ADPCM 2ch", 1, CODEC_ADPCM, 2041, 2},
+    {"22.05 kHz 16-bit stereo", "22kHz 16bit 2ch", 2, CODEC_PCM16, 0, 2},
+    {"22.05 kHz 8-bit stereo", "22kHz 8bit 2ch", 2, CODEC_PCM8, 0, 2},
+    {"22.05 kHz IMA ADPCM stereo", "22kHz ADPCM 2ch", 2, CODEC_ADPCM, 1017, 2},
+    {"11.025 kHz 16-bit stereo", "11kHz 16bit 2ch", 4, CODEC_PCM16, 0, 2},
+    {"11.025 kHz 8-bit stereo", "11kHz 8bit 2ch", 4, CODEC_PCM8, 0, 2},
+    {"11.025 kHz IMA ADPCM stereo", "11kHz ADPCM 2ch", 4, CODEC_ADPCM, 505, 2},
 };
 const int chain_format_count = sizeof(chain_formats) / sizeof(chain_formats[0]);
+const int chain_mono_format_count = 9;
 const int chain_default_format = 5;
 
 static void design_lowpass(FormatChain* chain, int divisor) {

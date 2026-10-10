@@ -10,7 +10,7 @@
 // the string argument of pdstream_feed. usb-stream/host/pdstream.py writes it; keep them in sync.
 #define PACKET_HEADER_BYTES 4
 
-typedef void (*PacketEmit)(void* context, const int16_t* samples, int count);
+typedef void (*PacketEmit)(void* context, const int16_t* frames, int count, int channels);
 
 typedef struct {
     StreamDecoder decoder;
@@ -20,7 +20,7 @@ typedef struct {
     uint32_t packets;
     uint32_t bytes;
     uint32_t lost;
-    int16_t output[STREAM_MAX_OUTPUT];
+    int16_t output[STREAM_MAX_OUTPUT * STREAM_MAX_CHANNELS];
 } PacketReceiver;
 
 void packet_init(PacketReceiver* receiver);

@@ -137,7 +137,7 @@ class App:
         self.device.pack(side="left", padx=(4, 12))
         self.device.bind("<<ComboboxSelected>>", lambda event: self.restart_stream())
         ttk.Label(controls, text="Format").pack(side="left")
-        self.format = ttk.Combobox(controls, state="readonly", width=24,
+        self.format = ttk.Combobox(controls, state="readonly", width=30,
                                    values=[f"{i}  {name}" for i, name in enumerate(self.formats)])
         self.format.current(self.lib.pdstream_default_format())
         self.format.pack(side="left", padx=(4, 12))

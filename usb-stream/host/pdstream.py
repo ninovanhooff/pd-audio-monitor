@@ -65,6 +65,7 @@ def load_encoder():
     lib.pdstream_new.argtypes = [ctypes.c_int]
     lib.pdstream_free.argtypes = [ctypes.c_void_p]
     lib.pdstream_encode.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
+    lib.pdstream_format_channels.argtypes = [ctypes.c_int]
     lib.pdstream_format_name.restype = ctypes.c_char_p
     return lib
 
@@ -73,10 +74,12 @@ class Encoder:
     def __init__(self, lib, fmt):
         self.lib = lib
         self.handle = lib.pdstream_new(fmt)
-        self.out = ctypes.create_string_buffer(2 * BLOCK + 4096)
+        self.channels = lib.pdstream_format_channels(fmt)
+        self.out = ctypes.create_string_buffer(2 * self.channels * BLOCK + 4096)
 
-    def encode(self, mono):
-        samples = np.ascontiguousarray(mono, dtype="<i2")
+    def encode(self, data):
+        """data: (n,) samples for a mono format, (n, 2) frames for a stereo one."""
+        samples = np.ascontiguousarray(data, dtype="<i2")
         chunks = []
         for start in range(0, len(samples), BLOCK):
             part = samples[start:start + BLOCK]
@@ -126,8 +129,10 @@ class Codec:
         self.packetizer = Packetizer(fmt, self.lib.pdstream_unit_bytes(fmt))
         self.packetizer.sequence = sequence
 
-    def commands(self, mono, flush=False):
-        return self.packetizer.commands(self.encoder.encode(mono), flush)
+    def commands(self, frames, flush=False):
+        if self.encoder.channels == 1:
+            frames = (frames.astype(np.int32).sum(axis=1) // 2).astype(np.int16)
+        return self.packetizer.commands(self.encoder.encode(frames), flush)
 
 
 class Console:
@@ -153,11 +158,14 @@ class Console:
 console = Console()
 
 
-def to_mono(frames):
-    frames = np.asarray(frames, dtype=np.int32)
-    if frames.ndim == 1:
-        return frames.astype(np.int16)
-    return (frames.sum(axis=1) // frames.shape[1]).astype(np.int16)
+def to_frames(samples):
+    """(n, channels) int16 as (n, 2) frames: a single channel goes to both sides."""
+    samples = np.asarray(samples, dtype=np.int16)
+    if samples.ndim == 1:
+        samples = samples[:, None]
+    if samples.shape[1] == 1:
+        return np.repeat(samples, 2, axis=1)
+    return samples[:, :2]
 
 
 def playdate_ports():
@@ -260,11 +268,11 @@ class Stats:
         self.commands = self.bytes = self.peak = 0
         self.last = time.monotonic()
 
-    def add(self, mono, commands):
+    def add(self, frames, commands):
         self.commands += len(commands)
         self.bytes += sum(len(command) for command in commands)
-        if len(mono):
-            self.peak = max(self.peak, int(np.abs(mono.astype(np.int32)).max()))
+        if len(frames):
+            self.peak = max(self.peak, int(np.abs(frames.astype(np.int32)).max()))
         now = time.monotonic()
         if now - self.last >= 1:
             seconds = now - self.last
@@ -290,15 +298,15 @@ def read_wav(path):
             sys.exit(f"{path}: need 16-bit {RATE} Hz; convert with "
                      f"ffmpeg -i {path} -ar {RATE} -c:a pcm_s16le out.wav")
         frames = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
-        return to_mono(frames.reshape(-1, wav.getnchannels()))
+        return to_frames(frames.reshape(-1, wav.getnchannels()))
 
 
 def stream_file(path, codec, sink, stats, names, paced):
-    mono = read_wav(path)
+    frames = read_wav(path)
     start = time.monotonic()
-    for offset in range(0, len(mono), BLOCK):
-        part = mono[offset:offset + BLOCK]
-        last = offset + BLOCK >= len(mono)
+    for offset in range(0, len(frames), BLOCK):
+        part = frames[offset:offset + BLOCK]
+        last = offset + BLOCK >= len(frames)
         follow_playdate(codec, sink, stats, names)
         commands = codec.commands(part, flush=last)
         sent = sink.write(commands)
@@ -424,7 +432,7 @@ def stream_device(name, codec, sink, stats, names, stop=None):
     blocks = queue.Queue()
 
     def callback(frames, count, timing, status):
-        blocks.put(to_mono(frames))
+        blocks.put(to_frames(frames))
 
     channels = min(2, info["max_input_channels"])
     # WASAPI shared mode only offers the mixer's rate; auto_convert resamples to RATE.
@@ -434,13 +442,13 @@ def stream_device(name, codec, sink, stats, names, stop=None):
         console.log(f"Capturing from {info['name']}")
         while stop is None or not stop.is_set():
             try:
-                mono = blocks.get(timeout=0.5)
+                frames = blocks.get(timeout=0.5)
             except queue.Empty:
                 continue
             follow_playdate(codec, sink, stats, names)
-            commands = codec.commands(mono)
+            commands = codec.commands(frames)
             sent = sink.write(commands)
-            stats.add(mono, commands if sent else [])
+            stats.add(frames, commands if sent else [])
             if blocks.qsize() > 20:
                 console.log("Falling behind: the serial link is slower than this format needs.")
 
