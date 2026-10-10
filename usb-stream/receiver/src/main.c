@@ -37,6 +37,8 @@ static const char* outputNames[] = {"speaker", "headphones", "speaker + headphon
 
 static struct {
     Output output;
+    int wantedFormat;
+    unsigned int lastRequestMs;
     int peak;
     int clipped;
     float meterDb;
@@ -134,6 +136,25 @@ static void headphoneChanged(int headphone, int mic) {
     applyOutput();
 }
 
+static int isReceiving(void) {
+    return receiver.format >= 0 && pd->system->getCurrentTimeMilliseconds() - ui.lastPacketMs < 1000;
+}
+
+// The console goes out over USB, where pdstream.py picks the request up. Repeated until the stream
+// switches, since pdstream.py may not be listening yet (or anymore).
+static void requestFormat(void) {
+    unsigned int now = pd->system->getCurrentTimeMilliseconds();
+    if (ui.wantedFormat < 0 || ui.wantedFormat == receiver.format || now - ui.lastRequestMs < 1000) return;
+    pd->system->logToConsole("pdstream format %d", ui.wantedFormat);
+    ui.lastRequestMs = now;
+}
+
+static void stepFormat(int step) {
+    int current = ui.wantedFormat >= 0 ? ui.wantedFormat : receiver.format >= 0 ? receiver.format : chain_default_format;
+    ui.wantedFormat = (current + step + chain_format_count) % chain_format_count;
+    ui.lastRequestMs = pd->system->getCurrentTimeMilliseconds() - 1000;
+}
+
 static void handleInput(void) {
     PDButtons pushed;
     pd->system->getButtonState(NULL, &pushed, NULL);
@@ -141,6 +162,8 @@ static void handleInput(void) {
         ui.output = (Output)((ui.output + 1) % OUTPUT_COUNT);
         applyOutput();
     }
+    if (pushed & kButtonUp) stepFormat(-1);
+    if (pushed & kButtonDown) stepFormat(1);
 }
 
 static void updateRates(void) {
@@ -224,12 +247,16 @@ static int update(void* userdata) {
     (void)userdata;
     feedReplay();
     handleInput();
+    requestFormat();
     updateRates();
 
     pd->graphics->clear(kColorWhite);
     drawString(fonts.label, "USB stream", 12, 8);
-    int receiving = receiver.format >= 0 && pd->system->getCurrentTimeMilliseconds() - ui.lastPacketMs < 1000;
-    drawRow(40, "Format", "", "%s", receiving ? chain_formats[receiver.format].name : "waiting for the Mac");
+    if (ui.wantedFormat >= 0 && ui.wantedFormat != receiver.format) {
+        drawRow(40, "Format", "⬆⬇", "%s ...", chain_formats[ui.wantedFormat].name);
+    } else {
+        drawRow(40, "Format", "⬆⬇", "%s", isReceiving() ? chain_formats[receiver.format].name : "waiting for the Mac");
+    }
     drawRow(64, "Output", "Ⓑ", "%s", outputNames[ui.output]);
     int kbTenths = ui.bytesPerSecond / 100;
     drawRow(88, "Link", "", "%d msg/s, %d.%d KB/s", ui.packetsPerSecond, kbTenths / 10, kbTenths % 10);
@@ -262,6 +289,7 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
 
     packet_init(&receiver);
     ui.output = OUTPUT_SPEAKER;
+    ui.wantedFormat = -1;
     ui.meterDb = -60;
     ui.windowDb = -60;
     ui.shownDb = -60;

@@ -45,7 +45,7 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 
 | Row | Shows |
 | --- | --- |
-| Format | Format of the incoming stream, set by `pdstream.py --format` |
+| Format ⬆⬇ | Format of the incoming stream. ⬆/⬇ ask `pdstream.py` to switch (shown with `...` until it does); `--format` sets the starting one |
 | Output Ⓑ | Speaker / headphones / both |
 | Link | Messages and bytes per second arriving |
 | Buffer | Audio queued. Playback starts at 150 ms; above 400 ms it drops back to 150 ms (clock drift). |
@@ -78,6 +78,10 @@ characters, so each packet is at most 183 bytes, which is 244 base64 characters.
 | 1 | Sequence number, wrapping at 256 |
 | 2–3 | Offset of the first data byte within its unit (uint16 LE) |
 | 4… | Stream bytes: 16-bit LE or 8-bit signed samples at the format's rate, or WAV-layout ADPCM blocks |
+
+The other way, the receiver logs `pdstream format <n>` to its console, which goes out over USB, once
+a second until the stream arrives in that format. `pdstream.py` switches its encoder and keeps the
+sequence numbers running.
 
 After a gap in the sequence numbers, the receiver skips to the next unit boundary and goes on.
 For ADPCM that is the next block. A new format number restarts the decoder.
