@@ -37,6 +37,7 @@ static const char* outputNames[] = {"speaker", "headphones", "speaker + headphon
 
 static struct {
     Output output;
+    int viaEval;
     int wantedFormat;
     unsigned int lastRequestMs;
     int peak;
@@ -68,7 +69,22 @@ static void emitSamples(void* context, const int16_t* samples, int count) {
 
 static void receive(const char* text) {
     if (strncmp(text, "msg ", 4) == 0) text += 4;
-    if (packet_receive(&receiver, text, emitSamples, NULL)) ui.lastPacketMs = pd->system->getCurrentTimeMilliseconds();
+    if (packet_receive(&receiver, text, emitSamples, NULL)) {
+        ui.lastPacketMs = pd->system->getCurrentTimeMilliseconds();
+        ui.viaEval = 0;
+    }
+}
+
+// pdstream_feed(packet): what the host's `eval` bytecode calls, with the packet as a raw string.
+static int feed(lua_State* L) {
+    (void)L;
+    size_t length = 0;
+    const uint8_t* packet = (const uint8_t*)pd->lua->getArgBytes(1, &length);
+    if (packet && packet_receive_bytes(&receiver, packet, (int)length, emitSamples, NULL)) {
+        ui.lastPacketMs = pd->system->getCurrentTimeMilliseconds();
+        ui.viaEval = 1;
+    }
+    return 0;
 }
 
 static int sourceCallback(void* context, int16_t* left, int16_t* right, int len) {
@@ -167,7 +183,7 @@ static void stepFormat(int rateStep, int codecStep) {
     int rate = (rateRank(current) + rateStep + 3) % 3, codec = codecRank(current);
     int best = -1, bestDistance = 0;
     for (int format = 0; format < chain_format_count; format++) {
-        if (format == PACKET_UNSTREAMABLE_FORMAT || rateRank(format) != rate) continue;
+        if ((format == PACKET_UNSTREAMABLE_FORMAT && !ui.viaEval) || rateRank(format) != rate) continue;
         int distance = codecRank(format) - codec;
         if (codecStep) {
             distance *= codecStep;
@@ -291,13 +307,19 @@ static int update(void* userdata) {
     }
     drawRow(64, "Output", "Ⓑ", "%s", outputNames[ui.output]);
     int kbTenths = ui.bytesPerSecond / 100;
-    drawRow(88, "Link", "", "%d msg/s, %d.%d KB/s", ui.packetsPerSecond, kbTenths / 10, kbTenths % 10);
+    drawRow(88, "Link", "", "%d %s/s, %d.%d KB/s", ui.packetsPerSecond, ui.viaEval ? "eval" : "msg", kbTenths / 10, kbTenths % 10);
     drawRow(112, "Buffer", "", "%d ms", (int)((writePos - readPos) / 44));
     drawMeter(142);
     drawRow(166, "Dropouts", "", "%d lost, %d under, %d over", (int)receiver.lost, (int)underruns, (int)overruns);
     drawString(fonts.value, "Mac: route audio to BlackHole and run", 12, 196);
     drawString(fonts.value, "usb-stream/host/pdstream.py", 12, 214);
     return 1;
+}
+
+static int updateFromLua(lua_State* L) {
+    (void)L;
+    update(NULL);
+    return 0;
 }
 
 static LCDFont* loadFont(const char* path) {
@@ -312,6 +334,14 @@ __declspec(dllexport)
 #endif
 int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     (void)arg;
+    // Lua runs the frame (main.lua calls pdstream_update): a C update callback would leave the game
+    // without the Lua runtime, and `eval` needs it.
+    if (event == kEventInitLua) {
+        const char* error;
+        if (!pd->lua->addFunction(feed, "pdstream_feed", &error)) pd->system->logToConsole("pdstream_feed: %s", error);
+        if (!pd->lua->addFunction(updateFromLua, "pdstream_update", &error)) pd->system->logToConsole("pdstream_update: %s", error);
+        return 0;
+    }
     if (event != kEventInit) return 0;
     pd = playdate;
 
@@ -334,7 +364,5 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     pd->sound->addSource(sourceCallback, NULL, 0);
     pd->system->setSerialMessageCallback(receive);
     replay = pd->file->open("replay.txt", kFileReadData);
-
-    pd->system->setUpdateCallback(update, NULL);
     return 0;
 }

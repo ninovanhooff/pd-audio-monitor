@@ -46,6 +46,10 @@ void packet_init(PacketReceiver* receiver) {
 int packet_receive(PacketReceiver* receiver, const char* text, PacketEmit emit, void* context) {
     uint8_t packet[PACKET_MAX_BYTES];
     int length = base64_decode(text, packet, PACKET_MAX_BYTES);
+    return packet_receive_bytes(receiver, packet, length, emit, context);
+}
+
+int packet_receive_bytes(PacketReceiver* receiver, const uint8_t* packet, int length, PacketEmit emit, void* context) {
     if (length < PACKET_HEADER_BYTES || packet[0] >= chain_format_count) return 0;
 
     const ChainFormat* format = &chain_formats[packet[0]];
