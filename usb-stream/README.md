@@ -36,6 +36,16 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
    make -C usb-stream/host bundle PYTHON=~/.venvs/pdstream/bin/python
    ```
 
+   Or build `usb-stream/host/dist/PDStream.app`, which does the same in a window, with status, the
+   log, and these setup and troubleshooting steps. Opened from Finder, it asks microphone access for
+   itself instead of for a terminal. Each build has a new signature, so after a rebuild you may
+   need to allow it again (see its Troubleshooting tab):
+
+   ```bash
+   make -C usb-stream/host app PYTHON=~/.venvs/pdstream/bin/python   # needs pyinstaller and Tk (brew install python-tk)
+   open usb-stream/host/dist/PDStream.app
+   ```
+
 5. Build `USBStream.pdx` (`make -C usb-stream/receiver`, with `PLAYDATE_SDK_PATH` set) and
    sideload it. Start it on the Playdate, which stays connected over USB.
 6. Run the streamer:
@@ -48,9 +58,9 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
    ```
 
    If the serial port is busy, quit the Playdate Simulator; it also talks to the device over USB.
-   If the peak stays at -99 dBFS, macOS is handing the capture silence: allow the app running the
-   script (Terminal, iTerm, ...) under **System Settings → Privacy & Security → Microphone**, then
-   restart that app.
+   Without microphone access, macOS hands the capture silence. `pdstream.py` checks at start and
+   stops if access is denied: allow the app running it (Terminal, iTerm, ...; the bundle runs under
+   it too) under **System Settings → Privacy & Security → Microphone**, then restart that app.
 
 ## On the Playdate
 

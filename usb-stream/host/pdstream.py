@@ -141,6 +141,29 @@ class Codec:
         return self.packetizer.lines(self.encoder.encode(mono), flush)
 
 
+class Console:
+    """Where progress goes: log lines, and a status line rewritten in place. pdstream_gui replaces it."""
+
+    def __init__(self):
+        self.status_shown = False
+
+    def log(self, text):
+        sys.stderr.write(("\n" if self.status_shown else "") + text + "\n")
+        self.status_shown = False
+
+    def status(self, text):
+        sys.stderr.write(f"\r{text} ")
+        sys.stderr.flush()
+        self.status_shown = True
+
+    def finish(self):
+        if self.status_shown:
+            sys.stderr.write("\n")
+
+
+console = Console()
+
+
 def to_mono(frames):
     frames = np.asarray(frames, dtype=np.int32)
     if frames.ndim == 1:
@@ -170,7 +193,7 @@ class SerialSink:
         self.port = None
         self.retry_at = 0
         if not self._reconnect():
-            sys.stderr.write("Waiting for a Playdate on USB: plug it in and unlock it\n")
+            console.log("Waiting for a Playdate on USB: plug it in and unlock it")
 
     def _open(self, device):
         self.port = self.serial.Serial(device, 115200, timeout=0.2, write_timeout=5)
@@ -185,7 +208,7 @@ class SerialSink:
                 for line in complete:
                     # Each eval answers with an empty line.
                     if self.verbose and line.strip():
-                        sys.stderr.write(line.decode(errors="replace").rstrip() + "\n")
+                        console.log(line.decode(errors="replace").rstrip())
                     match = FORMAT_REQUEST.search(line)
                     if match:
                         self.requested_format = int(match.group(1))
@@ -204,7 +227,7 @@ class SerialSink:
             self._open(ports[0])
         except (self.serial.SerialException, OSError):
             return False
-        sys.stderr.write(f"Playdate on {ports[0]}\n")
+        console.log(f"Playdate on {ports[0]}")
         return True
 
     def write(self, lines):
@@ -219,8 +242,16 @@ class SerialSink:
                 port.close()
             except (self.serial.SerialException, OSError):
                 pass
-            sys.stderr.write("\nPlaydate gone (unplugged or locked); waiting for it to come back\n")
+            console.log("Playdate gone (unplugged or locked); waiting for it to come back")
             return False
+
+    def close(self):
+        if self.port is not None:
+            try:
+                self.port.close()
+            except (self.serial.SerialException, OSError):
+                pass
+            self.port = None
 
 
 class FileSink:
@@ -240,7 +271,6 @@ class Stats:
         self.link = link
         self.lines = self.bytes = self.peak = 0
         self.last = time.monotonic()
-        self.reported = False
 
     def add(self, mono, lines):
         self.lines += len(lines)
@@ -251,10 +281,8 @@ class Stats:
         if now - self.last >= 1:
             seconds = now - self.last
             peak = 20 * np.log10(self.peak / 32768) if self.peak else -99
-            sys.stderr.write(f"\r{self.name}: {self.lines / seconds:4.0f} {self.link}/s  "
-                             f"{self.bytes / seconds / 1000:5.1f} KB/s on the wire  peak {peak:6.1f} dBFS ")
-            sys.stderr.flush()
-            self.reported = True
+            console.status(f"{self.name}: {self.lines / seconds:4.0f} {self.link}/s  "
+                           f"{self.bytes / seconds / 1000:5.1f} KB/s on the wire  peak {peak:6.1f} dBFS")
             self.lines = self.bytes = self.peak = 0
             self.last = now
 
@@ -267,7 +295,7 @@ def follow_playdate(codec, sink, stats, names):
         return
     codec.switch(fmt)
     stats.name = names[fmt]
-    sys.stderr.write(f"\nPlaydate picked format {fmt}: {names[fmt]}\n")
+    console.log(f"Playdate picked format {fmt}: {names[fmt]}")
 
 
 def read_wav(path):
@@ -295,9 +323,86 @@ def stream_file(path, codec, sink, stats, names, paced):
                 time.sleep(delay)
 
 
-def stream_device(name, codec, sink, stats, names):
+def microphone_app():
+    """The app macOS asks microphone access for: PDStream.app itself, else whatever started this."""
+    return "PDStream" if ".app/Contents/" in sys.executable else "the app running this (Terminal, iTerm, ...)"
+
+
+class _Block(ctypes.Structure):
+    # An Objective-C block literal, for AVFoundation's completion handler.
+    _fields_ = [("isa", ctypes.c_void_p), ("flags", ctypes.c_int), ("reserved", ctypes.c_int),
+                ("invoke", ctypes.c_void_p), ("descriptor", ctypes.c_void_p)]
+
+
+def _avcapture():
+    objc = ctypes.cdll.LoadLibrary("/usr/lib/libobjc.A.dylib")
+    avfoundation = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/AVFoundation.framework/AVFoundation")
+    objc.objc_getClass.restype = objc.sel_registerName.restype = ctypes.c_void_p
+    return objc, objc.objc_getClass(b"AVCaptureDevice"), ctypes.c_void_p.in_dll(avfoundation, "AVMediaTypeAudio")
+
+
+# The answer to this process's prompt: the status macOS reports keeps its value from launch.
+_microphone_answer = None
+
+
+def microphone_access():
+    """macOS microphone access of microphone_app(): "not determined", "restricted", "denied",
+    "authorized", or None off macOS."""
+    if sys.platform != "darwin":
+        return None
+    if _microphone_answer:
+        return _microphone_answer
+    try:
+        objc, device, audio = _avcapture()
+        send = ctypes.CFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(("objc_msgSend", objc))
+        return ["not determined", "restricted", "denied", "authorized"][
+            send(device, objc.sel_registerName(b"authorizationStatusForMediaType:"), audio)]
+    except (OSError, AttributeError, IndexError, ValueError):
+        return None
+
+
+def request_microphone_access(stop=None):
+    """Shows macOS's prompt and waits for the answer: True when granted. Asking through AVFoundation
+    rather than by opening the capture keeps microphone_access() current, and a capture opened before
+    the answer stays silent."""
+    try:
+        objc, device, audio = _avcapture()
+        global_block = ctypes.c_void_p.in_dll(ctypes.CDLL(None), "_NSConcreteGlobalBlock")
+    except (OSError, ValueError):
+        return False
+    answered = threading.Event()
+    granted = []
+    invoke = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_bool)(
+        lambda block, allowed: (granted.append(allowed), answered.set()))
+    descriptor = (ctypes.c_ulong * 2)(0, ctypes.sizeof(_Block))
+    block = _Block(ctypes.addressof(global_block), 1 << 28, 0,  # BLOCK_IS_GLOBAL: never copied or freed
+                   ctypes.cast(invoke, ctypes.c_void_p), ctypes.addressof(descriptor))
+    send = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(("objc_msgSend", objc))
+    send(device, objc.sel_registerName(b"requestAccessForMediaType:completionHandler:"), audio, ctypes.addressof(block))
+    global _microphone_answer
+    while not answered.wait(0.5):
+        if stop is not None and stop.is_set():
+            return False
+    _microphone_answer = "authorized" if granted[0] else "denied"
+    return granted[0]
+
+
+def stream_device(name, codec, sink, stats, names, stop=None):
     import sounddevice as sd
 
+    # Without access, macOS hands the capture silence instead of an error.
+    access = microphone_access()
+    if access == "not determined":
+        console.log(f"macOS asks for microphone access for {microphone_app()}: allow it.")
+        if request_microphone_access(stop):
+            access = "authorized"
+        elif stop is not None and stop.is_set():
+            return
+        else:
+            access = "denied"
+    if access in ("denied", "restricted"):
+        sys.exit(f"Microphone access is {access}, so the capture would be silent. Allow {microphone_app()} under "
+                 "System Settings → Privacy & Security → Microphone, then restart it.")
     try:
         info = sd.query_devices(name, "input")
     except ValueError as error:
@@ -311,15 +416,18 @@ def stream_device(name, codec, sink, stats, names):
     channels = min(2, info["max_input_channels"])
     with sd.InputStream(device=info["index"], channels=channels, samplerate=RATE, dtype="int16",
                         blocksize=BLOCK, callback=callback):
-        sys.stderr.write(f"Capturing from {info['name']}\n")
-        while True:
-            mono = blocks.get()
+        console.log(f"Capturing from {info['name']}")
+        while stop is None or not stop.is_set():
+            try:
+                mono = blocks.get(timeout=0.5)
+            except queue.Empty:
+                continue
             follow_playdate(codec, sink, stats, names)
             lines = codec.lines(mono)
             sent = sink.write(lines)
             stats.add(mono, lines if sent else [])
             if blocks.qsize() > 20:
-                sys.stderr.write("\nFalling behind: the serial link is slower than this format needs.\n")
+                console.log("Falling behind: the serial link is slower than this format needs.")
 
 
 def main():
@@ -352,8 +460,7 @@ def main():
             stream_device(args.device, codec, sink, stats, formats)
     except KeyboardInterrupt:
         pass
-    if stats.reported:
-        sys.stderr.write("\n")
+    console.finish()
 
 
 if __name__ == "__main__":
