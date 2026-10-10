@@ -1,4 +1,4 @@
-name: Windows host
+name: Release builds
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     tags: ["v*"]
 
 jobs:
-  build:
+  windows-host:
     runs-on: windows-latest
     permissions:
       contents: write
@@ -31,5 +31,29 @@ jobs:
           path: usb-stream/host/PD-Audio-Monitor-Host-*-windows-x64.zip
       - if: startsWith(github.ref, 'refs/tags/')
         run: gh release upload "$GITHUB_REF_NAME" PD-Audio-Monitor-Host-*-windows-x64.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  receiver:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
+      - name: Install the Playdate SDK
+        run: |
+          curl -fsSL https://download.panic.com/playdate_sdk/Linux/PlaydateSDK-latest.tar.gz | tar xz -C "$RUNNER_TEMP"
+          echo "PLAYDATE_SDK_PATH=$(echo "$RUNNER_TEMP"/PlaydateSDK-*)" >> "$GITHUB_ENV"
+      - run: make -C usb-stream/receiver
+      - run: zip -r "PDAudioMonitorReceiver-${GITHUB_REF_NAME}.pdx.zip" PDAudioMonitorReceiver.pdx
+        working-directory: usb-stream/receiver
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PDAudioMonitorReceiver
+          path: usb-stream/receiver/PDAudioMonitorReceiver-*.pdx.zip
+      - if: startsWith(github.ref, 'refs/tags/')
+        run: gh release upload "$GITHUB_REF_NAME" PDAudioMonitorReceiver-*.pdx.zip --clobber
+        working-directory: usb-stream/receiver
         env:
           GH_TOKEN: ${{ github.token }}
