@@ -15,6 +15,7 @@ const ChainFormat chain_formats[] = {
     {"11.025 kHz 16-bit mono", "11kHz 16bit 1ch", 4, CODEC_PCM16, 0, 1},
     {"11.025 kHz 8-bit mono", "11kHz 8bit 1ch", 4, CODEC_PCM8, 0, 1},
     {"11.025 kHz IMA ADPCM mono", "11kHz ADPCM 1ch", 4, CODEC_ADPCM, 505, 1},
+    {"44.1 kHz 16-bit stereo (bypass)", "44kHz 16bit 2ch (bypass)", 1, CODEC_PCM16, 0, 2},
     {"44.1 kHz 8-bit stereo", "44kHz 8bit 2ch", 1, CODEC_PCM8, 0, 2},
     {"44.1 kHz IMA ADPCM stereo", "44kHz ADPCM 2ch", 1, CODEC_ADPCM, 2041, 2},
     {"22.05 kHz 16-bit stereo", "22kHz 16bit 2ch", 2, CODEC_PCM16, 0, 2},

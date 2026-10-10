@@ -130,11 +130,12 @@ def gain_db(fmt, freq):
 
 
 # Divisor per format, as in format_chain.c.
-FORMATS = [1, 1, 1, 2, 2, 2, 4, 4, 4, 1, 1, 2, 2, 2, 4, 4, 4]
+FORMATS = [1, 1, 1, 2, 2, 2, 4, 4, 4, 1, 1, 1, 2, 2, 2, 4, 4, 4]
 MONO_FORMATS = 9
 
 passthrough = tone(1000, 0.2)
 check("format 0 (bypass) is the identity", render(0, passthrough) == passthrough)
+check("format 9 (stereo bypass) is the identity", render(9, passthrough) == passthrough)
 for fmt, name, nyquist in [(3, "22.05 kHz ADPCM", 11025), (5, "22.05 kHz 16-bit", 11025), (7, "11.025 kHz 8-bit", 5512)]:
     passband = gain_db(fmt, 1000)
     check(f"{name}: 1 kHz passes", abs(passband) < 1.0, f"{passband:+.2f} dB")

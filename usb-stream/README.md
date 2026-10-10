@@ -64,7 +64,7 @@ If the serial port is busy, quit the Playdate Simulator and Mirror; they also ta
 
 | Row | Shows |
 | --- | --- |
-| Format ✛Ⓐ | Format of the incoming stream, such as `22kHz 8bit 1ch`. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM), Ⓐ switches between 1 and 2 channels; the Playdate asks `pdstream.py` to switch and shows `...` until it does. The rate and codec wrap around, skipping the missing 44.1 kHz 16-bit stereo. `--format` sets the starting format, and the host app's Format menu switches it too |
+| Format ✛Ⓐ | Format of the incoming stream, such as `22kHz 8bit 1ch`. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM), Ⓐ switches between 1 and 2 channels; the Playdate asks `pdstream.py` to switch and shows `...` until it does. The rate and codec wrap around. `--format` sets the starting format, and the host app's Format menu switches it too |
 | Output Ⓑ | Speaker / headphones / both |
 | Link | `eval` packets and bytes arriving per second |
 | Buffer | Audio queued. Playback starts at 150 ms; above 400 ms it drops back to 150 ms (clock drift). |
@@ -84,20 +84,21 @@ If the serial port is busy, quit the Playdate Simulator and Mirror; they also ta
 | 6 | 11.025 kHz 16-bit mono | 11kHz 16bit 1ch | 22 | 24 |
 | 7 | 11.025 kHz 8-bit mono | 11kHz 8bit 1ch | 11 | 12 |
 | 8 | 11.025 kHz IMA ADPCM mono | 11kHz ADPCM 1ch | 6 | 6.1 |
-| 9 | 44.1 kHz 8-bit stereo | 44kHz 8bit 2ch | 87 | 96 |
-| 10 | 44.1 kHz IMA ADPCM stereo | 44kHz ADPCM 2ch | 44 | 48 |
-| 11 | 22.05 kHz 16-bit stereo | 22kHz 16bit 2ch | 87 | 96 |
-| 12 | 22.05 kHz 8-bit stereo | 22kHz 8bit 2ch | 44 | 48 |
-| 13 | 22.05 kHz IMA ADPCM stereo | 22kHz ADPCM 2ch | 22 | 24 |
-| 14 | 11.025 kHz 16-bit stereo | 11kHz 16bit 2ch | 44 | 48 |
-| 15 | 11.025 kHz 8-bit stereo | 11kHz 8bit 2ch | 22 | 24 |
-| 16 | 11.025 kHz IMA ADPCM stereo | 11kHz ADPCM 2ch | 11 | 12 |
+| 9 | 44.1 kHz 16-bit stereo (bypass) | 44kHz 16bit 2ch (bypass) | 173 | 192 |
+| 10 | 44.1 kHz 8-bit stereo | 44kHz 8bit 2ch | 87 | 96 |
+| 11 | 44.1 kHz IMA ADPCM stereo | 44kHz ADPCM 2ch | 44 | 48 |
+| 12 | 22.05 kHz 16-bit stereo | 22kHz 16bit 2ch | 87 | 96 |
+| 13 | 22.05 kHz 8-bit stereo | 22kHz 8bit 2ch | 44 | 48 |
+| 14 | 22.05 kHz IMA ADPCM stereo | 22kHz ADPCM 2ch | 22 | 24 |
+| 15 | 11.025 kHz 16-bit stereo | 11kHz 16bit 2ch | 44 | 48 |
+| 16 | 11.025 kHz 8-bit stereo | 11kHz 8bit 2ch | 22 | 24 |
+| 17 | 11.025 kHz IMA ADPCM stereo | 11kHz ADPCM 2ch | 11 | 12 |
 
-A Playdate takes about 86 `eval`s a second (measured with the bypass), so every format plays. 44.1 kHz
-16-bit stereo would need twice that, so it isn't offered. Stereo formats carry each channel on its own,
-like a stereo WAV: two samples per unit for PCM, two ADPCM blocks per unit. In a mono format, the
-host mixes the left and right inputs to one channel. The speaker mixes both channels to mono, so stereo
-matters on headphones.
+A Playdate takes at least 86 `eval`s a second (measured with the mono bypass), which carries every
+format but the stereo bypass; that one needs twice as many, more than has been measured. Stereo
+formats carry each channel on its own, like a stereo WAV: two samples per unit for PCM, two ADPCM
+blocks per unit. In a mono format, the host mixes the left and right inputs to one channel. The
+speaker mixes both channels to mono, so stereo matters on headphones.
 
 ## Development
 

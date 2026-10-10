@@ -81,6 +81,7 @@ Alternatively, the native ADPCM path: `newSampleFromData(â€¦, kSoundADPCMMono, â
 | 16-bit mono 11.025 kHz | 22.1 KB/s | 24 KB/s | 29.4 KB/s |
 | 16-bit mono 22.05 kHz | 44.1 KB/s | 48 KB/s | 58.8 KB/s |
 | 16-bit mono 44.1 kHz | 88.2 KB/s | 96 KB/s | 118 KB/s |
+| 16-bit stereo 44.1 kHz | 176.4 KB/s | 192 KB/s | 235 KB/s |
 
 The speaker mixes both channels to mono (SDK 1.13), so stereo only matters on headphones.
 
