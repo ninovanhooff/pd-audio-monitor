@@ -159,8 +159,9 @@ console = Console()
 
 
 def to_frames(samples):
-    """(n, channels) int16 as (n, 2) frames: a single channel goes to both sides."""
-    samples = np.asarray(samples, dtype=np.int16)
+    """(n, channels) int16 as (n, 2) frames: a single channel goes to both sides. Always a copy: PortAudio
+    reuses the buffer it passes to the callback."""
+    samples = np.array(samples, dtype=np.int16)
     if samples.ndim == 1:
         samples = samples[:, None]
     if samples.shape[1] == 1:

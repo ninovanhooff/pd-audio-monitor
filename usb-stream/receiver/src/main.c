@@ -372,7 +372,7 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     pd->display->setRefreshRate(50);
     pd->sound->getHeadphoneState(NULL, NULL, headphoneChanged);
     applyOutput();
-    pd->sound->addSource(sourceCallback, NULL, 0);
+    pd->sound->addSource(sourceCallback, NULL, 1);
     replay = pd->file->open("replay.bin", kFileReadData);
 
     pd->system->setUpdateCallback(update, NULL);

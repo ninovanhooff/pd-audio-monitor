@@ -68,6 +68,10 @@ with wave.open(f"{build}/input.wav") as wav:
 mono = (stereo.sum(axis=1) // 2).astype("<i2")
 interleaved = stereo.astype("<i2").reshape(-1)
 
+# PortAudio reuses the buffer it hands the capture callback, so queued frames must be copies.
+capture = np.zeros((pdstream.BLOCK, 2), np.int16)
+check("captured frames are copied", not np.shares_memory(pdstream.to_frames(capture), capture), "")
+
 if shutil.which("pdc"):
     for length in (1, 40, 41, 300, pdstream.PACKET_BYTES):
         text = "".join(chr(48 + i % 10) for i in range(length))
