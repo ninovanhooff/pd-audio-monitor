@@ -24,7 +24,7 @@ import numpy as np
 here, build = sys.argv[1], sys.argv[2]
 sys.path.insert(0, f"{here}/../host")
 import pdstream
-divisors = [1, 1, 1, 2, 4, 2, 2, 4]
+divisors = [1, 1, 1, 2, 4, 2, 2, 4, 4]
 failed = False
 
 def check(name, ok, detail):

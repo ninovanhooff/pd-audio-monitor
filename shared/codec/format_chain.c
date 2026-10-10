@@ -14,6 +14,7 @@ const ChainFormat chain_formats[] = {
     {"22.05 kHz 16-bit", 2, CODEC_PCM16, 0},
     {"22.05 kHz 8-bit", 2, CODEC_PCM8, 0},
     {"11.025 kHz 8-bit", 4, CODEC_PCM8, 0},
+    {"11.025 kHz 16-bit", 4, CODEC_PCM16, 0},
 };
 const int chain_format_count = sizeof(chain_formats) / sizeof(chain_formats[0]);
 const int chain_default_format = 3;

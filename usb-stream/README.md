@@ -75,6 +75,7 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 | 5 | 22.05 kHz 16-bit | 247 | 44 | 60, 48 |
 | 6 | 22.05 kHz 8-bit | 123 | 22 | 30, 24 |
 | 7 | 11.025 kHz 8-bit | 62 | 11 | 15, 12 |
+| 8 | 11.025 kHz 16-bit | 123 | 22 | 31, 24 |
 
 A Playdate takes about 390 `msg` lines a second (measured with the bypass format), so over `msg` the
 bypass can't be streamed: `pdstream.py` refuses it and the d-pad skips it. The other formats play

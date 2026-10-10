@@ -78,6 +78,7 @@ Alternatively, the native ADPCM path: `newSampleFromData(â€¦, kSoundADPCMMono, â
 | ADPCM mono 44.1 kHz | 22.1 KB/s | 29.4 KB/s |
 | 8-bit mono 22.05 kHz | 22.1 KB/s | 29.4 KB/s |
 | 8-bit mono 44.1 kHz | 44.1 KB/s | 58.8 KB/s |
+| 16-bit mono 11.025 kHz | 22.1 KB/s | 29.4 KB/s |
 | 16-bit mono 22.05 kHz | 44.1 KB/s | 58.8 KB/s |
 | 16-bit mono 44.1 kHz | 88.2 KB/s | 118 KB/s |
 

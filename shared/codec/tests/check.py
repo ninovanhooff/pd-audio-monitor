@@ -130,7 +130,7 @@ def gain_db(fmt, freq):
 
 
 # Divisor per format, as in format_chain.c.
-FORMATS = [1, 1, 1, 2, 4, 2, 2, 4]
+FORMATS = [1, 1, 1, 2, 4, 2, 2, 4, 4]
 
 passthrough = tone(1000, 0.2)
 check("format 0 (bypass) is the identity", render(0, passthrough) == passthrough)
