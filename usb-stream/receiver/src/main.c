@@ -176,8 +176,8 @@ static int codecRank(int format) {
     return codec == CODEC_PCM16 ? 2 : codec == CODEC_PCM8 ? 1 : 0;
 }
 
-// Not every rate has every codec: a rate step lands on the nearest codec that rate has, and a codec
-// step goes to the next one the rate has. Both wrap around.
+// Over msg, 44.1 kHz lacks 16-bit (the bypass): a rate step lands on the nearest codec that rate
+// has, and a codec step goes to the next one it has. Both wrap around.
 static void stepFormat(int rateStep, int codecStep) {
     int current = ui.wantedFormat >= 0 ? ui.wantedFormat : receiver.format >= 0 ? receiver.format : chain_default_format;
     int rate = (rateRank(current) + rateStep + 3) % 3, codec = codecRank(current);

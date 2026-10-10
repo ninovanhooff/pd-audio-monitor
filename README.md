@@ -22,6 +22,6 @@ make -C line-in-monitor                  # LineInMonitor.pdx
 shared/codec/tests/run_tests.sh          # needs ffmpeg; audioop / PLAYDATE_SDK_PATH enable extra checks
 
 # Preview a mix on the Mac as the monitor would play it (format numbers: run chain_render with no args)
-ffmpeg -i mix.wav -ac 1 -ar 44100 -f s16le - | shared/codec/tests/build/chain_render 3 \
+ffmpeg -i mix.wav -ac 1 -ar 44100 -f s16le - | shared/codec/tests/build/chain_render 5 \
   | ffmpeg -f s16le -ar 44100 -ac 1 -i - preview.wav
 ```

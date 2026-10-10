@@ -56,7 +56,7 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 
 | Row | Shows |
 | --- | --- |
-| Format ✛ | Format of the incoming stream. The bypass is only offered while the stream arrives over `eval`. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM); the Playdate asks `pdstream.py` to switch and shows `...` until it does. Both wrap around; a rate without the current codec gets the nearest one it has. `--format` sets the starting format |
+| Format ✛ | Format of the incoming stream. The bypass is only offered while the stream arrives over `eval`. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM); the Playdate asks `pdstream.py` to switch and shows `...` until it does. Both wrap around; over `msg`, 44.1 kHz without the bypass gets 8-bit. `--format` sets the starting format |
 | Output Ⓑ | Speaker / headphones / both |
 | Link | Packets per second, which link they come over, and bytes per second arriving |
 | Buffer | Audio queued. Playback starts at 150 ms; above 400 ms it drops back to 150 ms (clock drift). |
@@ -70,12 +70,12 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 | 0 | 44.1 kHz 16-bit (bypass): `eval` only | 493 | 87 | 120, 96 |
 | 1 | 44.1 kHz 8-bit | 247 | 44 | 60, 48 |
 | 2 | 44.1 kHz IMA ADPCM | 122 | 22 | 30, 24 |
-| **3** | **22.05 kHz IMA ADPCM** (default) | **62** | **11** | **15, 12** |
-| 4 | 11.025 kHz IMA ADPCM | 31 | 6 | 7.6, 6.1 |
-| 5 | 22.05 kHz 16-bit | 247 | 44 | 60, 48 |
-| 6 | 22.05 kHz 8-bit | 123 | 22 | 30, 24 |
+| 3 | 22.05 kHz 16-bit | 247 | 44 | 60, 48 |
+| 4 | 22.05 kHz 8-bit | 123 | 22 | 30, 24 |
+| **5** | **22.05 kHz IMA ADPCM** (default) | **62** | **11** | **15, 12** |
+| 6 | 11.025 kHz 16-bit | 123 | 22 | 31, 24 |
 | 7 | 11.025 kHz 8-bit | 62 | 11 | 15, 12 |
-| 8 | 11.025 kHz 16-bit | 123 | 22 | 31, 24 |
+| 8 | 11.025 kHz IMA ADPCM | 31 | 6 | 7.6, 6.1 |
 
 A Playdate takes about 390 `msg` lines a second (measured with the bypass format), so over `msg` the
 bypass can't be streamed: `pdstream.py` refuses it and the d-pad skips it. The other formats play

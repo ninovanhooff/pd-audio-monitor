@@ -46,7 +46,7 @@ run() {
     wait 2>/dev/null || true
 }
 
-run 3
+run 5
 run 7
 rm -f "$data/replay.txt"
 
@@ -55,7 +55,7 @@ import sys, numpy as np
 work = sys.argv[1]
 rate, window = 44100, 11025
 failed = False
-for fmt in (3, 7):
+for fmt in (5, 7):
     rec = np.fromfile(f"{work}/out{fmt}.raw", "<i2").astype(float)
     ref = np.fromfile(f"{work}/ref{fmt}.raw", "<i2").astype(float)
     # Align a stretch of the recording within the reference, then compare 1 s windows.

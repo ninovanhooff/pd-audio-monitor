@@ -9,15 +9,15 @@ const ChainFormat chain_formats[] = {
     {"44.1 kHz 16-bit (bypass)", 1, CODEC_PCM16, 0},
     {"44.1 kHz 8-bit", 1, CODEC_PCM8, 0},
     {"44.1 kHz IMA ADPCM", 1, CODEC_ADPCM, 2041},
-    {"22.05 kHz IMA ADPCM", 2, CODEC_ADPCM, 1017},
-    {"11.025 kHz IMA ADPCM", 4, CODEC_ADPCM, 505},
     {"22.05 kHz 16-bit", 2, CODEC_PCM16, 0},
     {"22.05 kHz 8-bit", 2, CODEC_PCM8, 0},
-    {"11.025 kHz 8-bit", 4, CODEC_PCM8, 0},
+    {"22.05 kHz IMA ADPCM", 2, CODEC_ADPCM, 1017},
     {"11.025 kHz 16-bit", 4, CODEC_PCM16, 0},
+    {"11.025 kHz 8-bit", 4, CODEC_PCM8, 0},
+    {"11.025 kHz IMA ADPCM", 4, CODEC_ADPCM, 505},
 };
 const int chain_format_count = sizeof(chain_formats) / sizeof(chain_formats[0]);
-const int chain_default_format = 3;
+const int chain_default_format = 5;
 
 static void design_lowpass(FormatChain* chain, int divisor) {
     chain->taps = divisor == 1 ? 0 : 32 * divisor - 1;
