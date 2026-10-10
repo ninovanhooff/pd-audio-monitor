@@ -157,15 +157,8 @@ def playdate_ports():
     return ports
 
 
-def find_port():
-    ports = playdate_ports()
-    if not ports:
-        sys.exit("No Playdate found on USB. Plug it in and unlock it, or pass --port.")
-    return ports[0]
-
-
 class SerialSink:
-    """Drops audio while the Playdate is unplugged or locked, and reopens the port when it returns."""
+    """Drops audio while the Playdate is unplugged or locked, and opens the port when it's there."""
 
     def __init__(self, port, verbose):
         import serial
@@ -176,7 +169,8 @@ class SerialSink:
         self.requested_format = None
         self.port = None
         self.retry_at = 0
-        self._open(port)
+        if not self._reconnect():
+            sys.stderr.write("Waiting for a Playdate on USB: plug it in and unlock it\n")
 
     def _open(self, device):
         self.port = self.serial.Serial(device, 115200, timeout=0.2, write_timeout=5)
@@ -210,7 +204,7 @@ class SerialSink:
             self._open(ports[0])
         except (self.serial.SerialException, OSError):
             return False
-        sys.stderr.write(f"Playdate back on {ports[0]}\n")
+        sys.stderr.write(f"Playdate on {ports[0]}\n")
         return True
 
     def write(self, lines):
@@ -349,7 +343,7 @@ def main():
         parser.error(f"format {args.format} needs more messages per second than a Playdate takes; use --link eval")
 
     codec = Codec(lib, args.format, args.link)
-    sink = FileSink(args.out) if args.out else SerialSink(args.port or find_port(), args.verbose)
+    sink = FileSink(args.out) if args.out else SerialSink(args.port, args.verbose)
     stats = Stats(formats[args.format], args.link)
     try:
         if args.input:
