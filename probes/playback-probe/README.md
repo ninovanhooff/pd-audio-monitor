@@ -14,10 +14,12 @@ results on screen and in the console:
 
 | | Simulator 3.1.2 (Linux) | Device |
 | --- | --- | --- |
-| ADPCM rounding | shift-add (IMA reference): 0 mismatches; multiply (ffmpeg): 41455 of 44100 | **to run** |
-| 22.05 → 44.1 kHz | linear interpolation, −90 dB residual (zero-order hold −6 dB) | **to run** |
+| ADPCM rounding | shift-add (IMA reference): 0 mismatches; multiply (ffmpeg): 41455 of 44100 | not measured |
+| 22.05 → 44.1 kHz | linear interpolation, −90 dB residual (zero-order hold −6 dB) | not measured |
 
-If the device disagrees, change `format_chain.c` to match.
+The device column stays empty: its console output goes over the USB link that the Simulator uses, which
+other serial traffic disturbs, so the results can't be read there. If the device disagrees, change
+`format_chain.c` to match.
 
 While writing the probe, a `.pda` detail turned up: pdc copies the WAV's ADPCM blocks unchanged
 except that it stores the **high nibble first**. `getData()` returns the data starting at the
