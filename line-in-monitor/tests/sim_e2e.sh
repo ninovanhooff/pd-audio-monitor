@@ -54,7 +54,7 @@ run() {
 run bypass 643,387                 # A: compare with bypass
 run pcm22 410,397 410,397          # right x2: 22.05 kHz 16-bit
 "$work/chain_render" 0 < "$work/input.raw" > "$work/bypass_ref.raw"
-"$work/chain_render" 4 < "$work/input.raw" > "$work/pcm22_ref.raw"
+"$work/chain_render" 5 < "$work/input.raw" > "$work/pcm22_ref.raw"
 
 python3 - "$work" <<'PY'
 import sys, numpy as np

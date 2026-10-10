@@ -20,7 +20,7 @@ python3 - "$here" "$build" <<'PY'
 import subprocess, sys, wave
 import numpy as np
 here, build = sys.argv[1], sys.argv[2]
-divisors = [1, 1, 2, 4, 2, 2, 4]
+divisors = [1, 1, 1, 2, 4, 2, 2, 4]
 failed = False
 
 def check(name, ok, detail):

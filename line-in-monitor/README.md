@@ -35,7 +35,7 @@ The screen shows each setting with its controls as Playdate button glyphs.
 | ⬆ ⬇ 🎣 | Digital input gain (−30 to +30 dB) |
 
 Formats: 44.1 kHz 16-bit (bypass), 44.1 / 22.05 / 11.025 kHz IMA ADPCM, 22.05 kHz 16-bit, and
-22.05 / 11.025 kHz 8-bit. Each format low-pass filters and decimates to its rate, quantizes with its
+44.1 / 22.05 / 11.025 kHz 8-bit. Each format low-pass filters and decimates to its rate, quantizes with its
 codec (ADPCM: the shift-add rounding measured in the Simulator, Audacity's block sizes), then upsamples by linear
 interpolation like the Playdate does (see `probes/playback-probe`). The same chain runs on the Mac
 with `shared/codec/tests/chain_render`, so you can preview the effect on headphones.

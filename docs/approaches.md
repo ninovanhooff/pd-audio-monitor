@@ -75,6 +75,7 @@ Alternatively, the native ADPCM path: `newSampleFromData(â€¦, kSoundADPCMMono, â
 | ADPCM mono 22.05 kHz (default) | 11.0 KB/s | 14.7 KB/s |
 | ADPCM mono 44.1 kHz | 22.1 KB/s | 29.4 KB/s |
 | 8-bit mono 22.05 kHz | 22.1 KB/s | 29.4 KB/s |
+| 8-bit mono 44.1 kHz | 44.1 KB/s | 58.8 KB/s |
 | 16-bit mono 22.05 kHz | 44.1 KB/s | 58.8 KB/s |
 | 16-bit mono 44.1 kHz | 88.2 KB/s | 118 KB/s |
 
@@ -97,7 +98,7 @@ The speaker mixes both channels to mono (SDK 1.13), so stereo only matters on he
 
 1. Run `probes/playback-probe` on hardware. The line-in monitor's input is noisy on hardware,
    worse with USB attached.
-2. Run `usb-stream` on hardware: does `msg` keep up with format 2 (62 messages/s), and with
+2. Run `usb-stream` on hardware: does `msg` keep up with format 3 (62 messages/s), and with
    which formats? If not, try `eval` with binary payloads.
 3. A macOS companion app (menu bar, format picker, process tap) in place of BlackHole and the script.
    The HAL device comes later.

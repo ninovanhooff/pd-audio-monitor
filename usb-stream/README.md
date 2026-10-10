@@ -67,12 +67,13 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 | # | Format | `msg`/s | KB/s on the wire |
 | --- | --- | --- | --- |
 | 0 | 44.1 kHz 16-bit (bypass): too much for the Playdate, `--out` only | 493 | 120 |
-| 1 | 44.1 kHz IMA ADPCM | 122 | 30 |
-| **2** | **22.05 kHz IMA ADPCM** (default) | **62** | **15** |
-| 3 | 11.025 kHz IMA ADPCM | 31 | 7.6 |
-| 4 | 22.05 kHz 16-bit | 247 | 60 |
-| 5 | 22.05 kHz 8-bit | 123 | 30 |
-| 6 | 11.025 kHz 8-bit | 62 | 15 |
+| 1 | 44.1 kHz 8-bit | 247 | 60 |
+| 2 | 44.1 kHz IMA ADPCM | 122 | 30 |
+| **3** | **22.05 kHz IMA ADPCM** (default) | **62** | **15** |
+| 4 | 11.025 kHz IMA ADPCM | 31 | 7.6 |
+| 5 | 22.05 kHz 16-bit | 247 | 60 |
+| 6 | 22.05 kHz 8-bit | 123 | 30 |
+| 7 | 11.025 kHz 8-bit | 62 | 15 |
 
 A Playdate takes about 390 messages a second (measured with the bypass format), so the bypass
 can't be streamed: `pdstream.py` refuses it and the d-pad skips it. The other formats play on a Playdate.
