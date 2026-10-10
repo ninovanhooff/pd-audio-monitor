@@ -37,6 +37,9 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
    ```
 
    If the serial port is busy, quit the Playdate Simulator; it also talks to the device over USB.
+   If the peak stays at -99 dBFS, macOS is handing the capture silence: allow the app running the
+   script (Terminal, iTerm, ...) under **System Settings → Privacy & Security → Microphone**, then
+   restart that app.
 
 ## On the Playdate
 
