@@ -6,7 +6,7 @@
 // IMA ADPCM in the WAV (format tag 0x11) layout: 4 bits per sample, each block starting with a
 // header that holds the first sample verbatim plus the step index.
 // Decoders disagree on rounding: the IMA reference (and Python's audioop) sums shifted steps, ffmpeg's
-// adpcm_ima_wav multiplies. Which one Playdate uses is what probes/adpcm-rounding measures.
+// adpcm_ima_wav multiplies. Which one Playdate uses is what probes/playback-probe measures.
 typedef enum { IMA_ROUNDING_SHIFT_ADD, IMA_ROUNDING_MULTIPLY } ImaRounding;
 
 typedef struct {
