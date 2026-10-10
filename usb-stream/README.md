@@ -24,7 +24,16 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 
    ```bash
    make -C usb-stream/host
-   python3 -m pip install numpy pyserial sounddevice
+   python3 -m venv ~/.venvs/pdstream
+   ~/.venvs/pdstream/bin/pip install numpy pyserial sounddevice
+   ```
+
+   Or bundle it into one executable, `usb-stream/host/dist/pdstream`, that runs on Macs with the
+   same CPU without Python or the packages (each start unpacks it first, which takes about 3 s):
+
+   ```bash
+   ~/.venvs/pdstream/bin/pip install pyinstaller
+   make -C usb-stream/host bundle PYTHON=~/.venvs/pdstream/bin/python
    ```
 
 5. Build `USBStream.pdx` (`make -C usb-stream/receiver`, with `PLAYDATE_SDK_PATH` set) and
@@ -32,8 +41,9 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 6. Run the streamer:
 
    ```bash
-   python3 usb-stream/host/pdstream.py              # default 22.05 kHz IMA ADPCM
-   python3 usb-stream/host/pdstream.py --help       # formats, --device, --port, --input file.wav
+   ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py          # default 22.05 kHz IMA ADPCM
+   ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py --help   # formats, --device, --port, --input file.wav
+   usb-stream/host/dist/pdstream                                     # the bundle takes the same options
    ```
 
    If the serial port is busy, quit the Playdate Simulator; it also talks to the device over USB.

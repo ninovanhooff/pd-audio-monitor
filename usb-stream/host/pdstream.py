@@ -31,7 +31,8 @@ UNSTREAMABLE_FORMAT = 0
 
 
 def load_encoder():
-    here = Path(__file__).resolve().parent
+    # A PyInstaller bundle unpacks the library next to its own files, in sys._MEIPASS.
+    here = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     for name in ("libpdstream.dylib", "libpdstream.so"):
         if (here / name).exists():
             lib = ctypes.CDLL(str(here / name))
