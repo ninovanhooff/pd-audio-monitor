@@ -23,12 +23,14 @@ Mac headphone out (TRS) ──► splitter "mic" socket ─┐
 
 ## Controls
 
+The screen shows each setting with its controls as Playdate button glyphs.
+
 | Input | Action |
 | --- | --- |
-| Left / Right | Format (default 22.05 kHz IMA ADPCM) |
-| A | Toggle quick A/B against the 44.1 kHz 16-bit bypass |
-| B | Output: speaker / headphones / both |
-| Up / Down, crank | Digital input gain (−30 to +30 dB) |
+| ⬅ ➡ | Format (default 22.05 kHz IMA ADPCM) |
+| Ⓐ | Toggle quick A/B against the 44.1 kHz 16-bit bypass |
+| Ⓑ | Output: speaker / headphones / both |
+| ⬆ ⬇ 🎣 | Digital input gain (−30 to +30 dB) |
 
 Formats: 44.1 kHz 16-bit (bypass), 44.1 / 22.05 / 11.025 kHz IMA ADPCM, 22.05 kHz 16-bit, and
 22.05 / 11.025 kHz 8-bit. Each format low-pass filters and decimates to its rate, quantizes with its

@@ -26,6 +26,8 @@ Device builds need `arm-none-eabi-gcc` (on Ubuntu: `gcc-arm-none-eabi libnewlib-
 - No `snprintf`/stdio in device code: newlib's stdio pulls in syscalls the device doesn't provide
   (`_write`, `_sbrk`, ... fail to link). Use `pd->system->formatString`/`vaFormatString`.
 - The device FPU is single precision: keep `double` out of hot paths.
+- Button glyphs (Ⓐ Ⓑ ✛ ⬆ ➡ ⬇ ⬅ 🎣 ⊙ 🔒 🟨, drawn with `kUTF8Encoding`) are complete only in
+  `Asheville-Sans-14-Light`. Asheville Bold has none of them, and the Roobert fonts lack most.
 - `requestMicAccess` (SDK 3.1) must be called before `setMicCallback`.
 - Simulator first run shows dialogs and the mic prompt; `sim_e2e.sh` seeds
   `Disk/Data/<bundleID>/Permissions` and the Simulator ini to skip them.

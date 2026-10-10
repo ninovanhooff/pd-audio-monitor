@@ -6,7 +6,12 @@
 #include "pd_api.h"
 
 static PlaydateAPI* pd;
-static LCDFont* font;
+// Asheville Light carries Panic's button glyphs (Ⓐ Ⓑ ⬅ 🎣 ...); the Roobert fonts lack most of them.
+static struct {
+    LCDFont* label;
+    LCDFont* value;
+    LCDFont* glyph;
+} fonts;
 
 // Single producer (mic callback), single consumer (source callback): only the producer moves
 // writePos and only the consumer moves readPos, so the ring needs no lock.
@@ -165,20 +170,27 @@ static void handleInput(void) {
     if ((pushed & (kButtonUp | kButtonDown)) || crank != 0) applyGain();
 }
 
-static void drawLine(int y, const char* text) {
-    pd->graphics->drawText(text, strlen(text), kASCIIEncoding, 12, y);
+static void drawString(LCDFont* font, const char* text, int x, int y) {
+    pd->graphics->setFont(font);
+    pd->graphics->drawText(text, strlen(text), kUTF8Encoding, x, y);
 }
 
-// pd's formatter instead of snprintf: newlib's stdio needs syscalls the device doesn't provide.
-static void drawLinef(int y, const char* format, ...) {
+// One row: bold label, value, and the controls for it right-aligned as button glyphs.
+static void drawRow(int y, const char* label, const char* glyphs, const char* format, ...) {
     va_list args;
     va_start(args, format);
-    char* text = NULL;
-    pd->system->vaFormatString(&text, format, args);
+    char* value = NULL;
+    pd->system->vaFormatString(&value, format, args);
     va_end(args);
-    if (!text) return;
-    drawLine(y, text);
-    pd->system->realloc(text, 0);
+
+    drawString(fonts.label, label, 12, y);
+    if (value) {
+        drawString(fonts.value, value, 116, y);
+        pd->system->realloc(value, 0);
+    }
+    int width = pd->graphics->getTextWidth(fonts.glyph, glyphs, strlen(glyphs), kUTF8Encoding, 0);
+    int offset = (pd->graphics->getFontHeight(fonts.value) - pd->graphics->getFontHeight(fonts.glyph)) / 2;
+    drawString(fonts.glyph, glyphs, 388 - width, y + offset);
 }
 
 static void drawMeter(int y) {
@@ -192,7 +204,7 @@ static void drawMeter(int y) {
         ui.clipHold = 30;
     }
 
-    const int x = 12, width = 300, height = 14;
+    const int x = 12, width = 320, height = 14;
     int filled = (int)((ui.meterDb + 60.0f) / 60.0f * (float)width);
     pd->graphics->drawRect(x, y, width, height, kColorBlack);
     pd->graphics->fillRect(x, y, filled, height, kColorBlack);
@@ -202,7 +214,7 @@ static void drawMeter(int y) {
     }
     if (ui.clipHold > 0) {
         ui.clipHold--;
-        pd->graphics->drawText("CLIP", 4, kASCIIEncoding, x + width + 10, y);
+        drawString(fonts.label, "CLIP", x + width + 12, y);
     }
 }
 
@@ -211,35 +223,40 @@ static int update(void* userdata) {
     handleInput();
 
     pd->graphics->clear(kColorWhite);
-    pd->graphics->setFont(font);
-
-    drawLine(8, "Line-in monitor");
+    drawString(fonts.label, "Line-in monitor", 12, 8);
     switch (ui.mic) {
     case MIC_WAITING:
-        drawLine(32, "Waiting for microphone permission...");
+        drawString(fonts.value, "Waiting for microphone permission...", 12, 40);
         return 1;
     case MIC_DENIED:
-        drawLine(32, "Microphone access denied.");
-        drawLine(52, "Allow it in Settings > Permissions.");
+        drawString(fonts.value, "Microphone access denied.", 12, 40);
+        drawString(fonts.value, "Allow it in Settings > Permissions.", 12, 60);
         return 1;
     case MIC_FAILED:
-        drawLine(32, "Could not open the headset input.");
+        drawString(fonts.value, "Could not open the headset input.", 12, 40);
         return 1;
     case MIC_RUNNING:
         break;
     }
 
-    drawLinef(36, "< %s >", chain_formats[ui.format].name);
-    drawLine(58, ui.compare ? "A: playing BYPASS (44.1 kHz 16-bit)" : "A: compare with bypass");
-    drawLinef(80, "B: output %s", outputNames[ui.output]);
     int tenths = (int)lrintf(ui.gainDb * 10.0f);
     int magnitude = tenths < 0 ? -tenths : tenths;
-    drawLinef(102, "Gain %c%d.%d dB (crank, up/down)", tenths < 0 ? '-' : '+', magnitude / 10, magnitude % 10);
-    drawMeter(128);
-    drawLinef(156, "Underruns %d  overruns %d", (int)underruns, (int)overruns);
-    drawLine(196, "Mac audio out -> splitter mic plug");
-    drawLine(216, "Keep peaks out of CLIP with Mac volume");
+    drawRow(40, "Format", "⬅ ➡", "%s", chain_formats[ui.format].name);
+    drawRow(64, "Compare", "Ⓐ", "%s", ui.compare ? "playing bypass" : "off");
+    drawRow(88, "Output", "Ⓑ", "%s", outputNames[ui.output]);
+    drawRow(112, "Gain", "⬆ ⬇ 🎣", "%c%d.%d dB", tenths < 0 ? '-' : '+', magnitude / 10, magnitude % 10);
+    drawMeter(142);
+    drawRow(166, "Dropouts", "", "%d under, %d over", (int)underruns, (int)overruns);
+    drawString(fonts.value, "Mac audio out -> splitter mic plug.", 12, 196);
+    drawString(fonts.value, "Keep peaks out of CLIP with the Mac volume.", 12, 214);
     return 1;
+}
+
+static LCDFont* loadFont(const char* path) {
+    const char* error;
+    LCDFont* font = pd->graphics->loadFont(path, &error);
+    if (!font) pd->system->error("Couldn't load %s: %s", path, error);
+    return font;
 }
 
 #ifdef _WINDLL
@@ -250,16 +267,15 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     if (event != kEventInit) return 0;
     pd = playdate;
 
-    const char* error;
-    font = pd->graphics->loadFont("/System/Fonts/Asheville-Sans-14-Bold.pft", &error);
-    if (!font) pd->system->error("Couldn't load font: %s", error);
+    fonts.label = loadFont("/System/Fonts/Roobert-11-Bold.pft");
+    fonts.value = loadFont("/System/Fonts/Roobert-11-Medium.pft");
+    fonts.glyph = loadFont("/System/Fonts/Asheville-Sans-14-Light.pft");
 
     ui.format = chain_default_format;
     ui.output = OUTPUT_SPEAKER;
     ui.meterDb = -60;
     applyGain();
     applyFormat();
-
 
     pd->system->setAutoLockDisabled(1);
     pd->display->setRefreshRate(30);
