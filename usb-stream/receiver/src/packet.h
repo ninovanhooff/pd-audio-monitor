@@ -10,6 +10,8 @@
 // usb-stream/host/pdstream.py writes it; keep both in sync.
 #define PACKET_HEADER_BYTES 4
 #define PACKET_MAX_BYTES 192
+// The bypass format needs 493 msg/s; a Playdate takes about 390.
+#define PACKET_UNSTREAMABLE_FORMAT 0
 
 typedef void (*PacketEmit)(void* context, const int16_t* samples, int count);
 

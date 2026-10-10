@@ -26,6 +26,8 @@ FORMAT_REQUEST = re.compile(rb"pdstream format (\d+)")
 # the device's limit of about 251 per message.
 HEADER_BYTES = 4
 PACKET_BYTES = 183
+# The bypass format needs 493 msg/s; a Playdate takes about 390.
+UNSTREAMABLE_FORMAT = 0
 
 
 def load_encoder():
@@ -229,7 +231,7 @@ class Stats:
 
 def follow_playdate(codec, sink, stats, names):
     fmt = sink.requested_format
-    if fmt is None or fmt == codec.format or not 0 <= fmt < len(names):
+    if fmt is None or fmt == codec.format or fmt == UNSTREAMABLE_FORMAT or not 0 <= fmt < len(names):
         return
     codec.switch(fmt)
     stats.name = names[fmt]
@@ -303,6 +305,8 @@ def main():
     args = parser.parse_args()
     if not 0 <= args.format < len(formats):
         parser.error(f"--format must be 0 to {len(formats) - 1}")
+    if args.format == UNSTREAMABLE_FORMAT and not args.out:
+        parser.error(f"format {args.format} needs more messages per second than a Playdate takes; use it with --out only")
 
     codec = Codec(lib, args.format)
     sink = FileSink(args.out) if args.out else SerialSink(args.port or find_port(), args.verbose)

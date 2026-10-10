@@ -151,7 +151,10 @@ static void requestFormat(void) {
 
 static void stepFormat(int step) {
     int current = ui.wantedFormat >= 0 ? ui.wantedFormat : receiver.format >= 0 ? receiver.format : chain_default_format;
-    ui.wantedFormat = (current + step + chain_format_count) % chain_format_count;
+    do {
+        current = (current + step + chain_format_count) % chain_format_count;
+    } while (current == PACKET_UNSTREAMABLE_FORMAT);
+    ui.wantedFormat = current;
     ui.lastRequestMs = pd->system->getCurrentTimeMilliseconds() - 1000;
 }
 

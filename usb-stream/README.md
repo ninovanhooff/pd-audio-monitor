@@ -56,7 +56,7 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 
 | # | Format | `msg`/s | KB/s on the wire |
 | --- | --- | --- | --- |
-| 0 | 44.1 kHz 16-bit (bypass) | 493 | 120 |
+| 0 | 44.1 kHz 16-bit (bypass): too much for the Playdate, `--out` only | 493 | 120 |
 | 1 | 44.1 kHz IMA ADPCM | 122 | 30 |
 | **2** | **22.05 kHz IMA ADPCM** (default) | **62** | **15** |
 | 3 | 11.025 kHz IMA ADPCM | 31 | 7.6 |
@@ -64,8 +64,8 @@ equals `chain_render` (and the line-in monitor's emulation) sample for sample.
 | 5 | 22.05 kHz 8-bit | 123 | 30 |
 | 6 | 11.025 kHz 8-bit | 62 | 15 |
 
-How many messages a second the Playdate accepts hasn't been measured yet. The Link row and the
-lost count show it.
+A Playdate takes about 390 messages a second (measured with the bypass format), so the bypass
+can't be streamed: `pdstream.py` refuses it and ⬆/⬇ skip it. The other formats play on a Playdate.
 
 ## Protocol
 
@@ -100,7 +100,4 @@ receiver taking `eval` payloads is the fallback if `msg` turns out too slow (`do
 
 ## Not yet verified
 
-- On a Playdate: `msg` throughput and cadence, which is the main risk; whether 150 ms of buffer
-  covers the delivery jitter; CPU load.
-- On a Mac: capture from BlackHole with `sounddevice`, and port detection. The live path was
-  tested on Linux, with PulseAudio standing in for BlackHole and a pty for the Playdate.
+- CPU load on the Playdate.
