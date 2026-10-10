@@ -57,21 +57,8 @@ Any input that receives the audio works. If CABLE Output is missing, the host fa
 `VoiceMeeter Output`, the virtual output of VoiceMeeter; pick something else under Input
 (or with `--device`) if you route audio elsewhere. Never pick a microphone or your speakers.
 
-### Windows: build
-
-Install Python, MinGW-w64 gcc and `pip install numpy pyserial sounddevice pyinstaller`, then:
-
-```bash
-gcc -std=c11 -O2 -shared -static-libgcc -Ishared/codec -o usb-stream/host/libpdstream.dll usb-stream/host/encoder.c shared/codec/format_stream.c shared/codec/format_chain.c shared/codec/ima_adpcm.c
-cd usb-stream/host && python -m PyInstaller --noconfirm --workpath build/app --distpath dist host.spec
-```
-
-`pdstream.py --device` takes part of an input's name. It defaults to the first of `CABLE Output` and
-`VoiceMeeter Output` that exists on Windows, and `BlackHole` on macOS. The receiver needs the
-Playdate SDK's ARM toolchain and isn't built on Windows: take it from the release, or build it on a Mac.
-
 The host app's Setup and Troubleshooting tabs repeat these steps and cover the usual problems.
-If the serial port is busy, quit the Playdate Simulator; it also talks to the device over USB.
+If the serial port is busy, quit the Playdate Simulator and Mirror; they also talk to the device over USB.
 
 ## On the Playdate
 
@@ -104,7 +91,7 @@ A Playdate takes about 86 `eval`s a second (measured with the bypass), so every 
 
 ### Build and run
 
-This section is for macOS (Linux works for everything but the `.app`); for the Windows host, see above.
+This section is for macOS (Linux works for everything but the `.app`); for the Windows host, see Build on Windows below.
 Building needs the Xcode command line tools, and the receiver needs the Playdate SDK.
 
 1. Build the encoder library and install the Python packages:
@@ -149,13 +136,36 @@ Building needs the Xcode command line tools, and the receiver needs the Playdate
    itself. Each build has a new signature, so after a rebuild you may need to allow it again:
    `tccutil reset Microphone nl.ninovanhooff.pdstream`.
 
+### Build on Windows
+
+Install Python, MinGW-w64 gcc and `pip install numpy pyserial sounddevice pyinstaller`, then:
+
+```bash
+gcc -std=c11 -O2 -shared -static-libgcc -Ishared/codec -o usb-stream/host/libpdstream.dll usb-stream/host/encoder.c shared/codec/format_stream.c shared/codec/format_chain.c shared/codec/ima_adpcm.c
+cd usb-stream/host && python -m PyInstaller --noconfirm --workpath build/app --distpath dist host.spec
+```
+
+`pdstream.py --device` takes part of an input's name. It defaults to the first of `CABLE Output` and
+`VoiceMeeter Output` that exists on Windows, and `BlackHole` on macOS. The receiver needs the
+Playdate SDK's ARM toolchain and isn't built on Windows: take it from the release, or build it on a Mac.
+
 ### Releases
 
 `.github/workflows/release-builds.yml` builds the Windows host (`.exe` in a zip) and the receiver
 (`.pdx` zip) on GitHub: run it from the Actions tab, or push a `v*` tag for a release that already
 exists, and it attaches both zips. The macOS host is built locally, as above.
 
-### Protocol
+### Test
+
+- `tests/run_tests.sh`: on the host, `pdstream.py` writes its `eval` commands for a test signal and
+  the receiver's `packet.c` decodes them. Every format must equal `chain_render` bit for bit,
+  decoding must recover after two dropped packets, and, with pdc on the PATH, the bytecode must
+  equal pdc's.
+- `tests/sim_e2e.sh` (headless Linux): the Simulator has no serial input, so the receiver replays
+  recorded commands from `replay.bin` in its data folder, taking the packets out of the bytecode.
+  The check records its output and compares it with `chain_render` (−82 dB residual).
+
+## Protocol
 
 Each packet is up to 1024 raw bytes inside `eval <length>\n<Lua bytecode>`. The bytecode is a call
 `pdstream_feed("<packet>")`, built around the packet from a template that equals pdc's output
@@ -181,13 +191,3 @@ After a gap in the sequence numbers, the receiver skips to the next unit boundar
 For ADPCM that is the next block. A new format number restarts the decoder.
 
 Why C: Lua can't feed PCM to the audio engine, so the `eval` packets go straight to a C function.
-
-### Test
-
-- `tests/run_tests.sh`: on the host, `pdstream.py` writes its `eval` commands for a test signal and
-  the receiver's `packet.c` decodes them. Every format must equal `chain_render` bit for bit,
-  decoding must recover after two dropped packets, and, with pdc on the PATH, the bytecode must
-  equal pdc's.
-- `tests/sim_e2e.sh` (headless Linux): the Simulator has no serial input, so the receiver replays
-  recorded commands from `replay.bin` in its data folder, taking the packets out of the bytecode.
-  The check records its output and compares it with `chain_render` (−82 dB residual).
