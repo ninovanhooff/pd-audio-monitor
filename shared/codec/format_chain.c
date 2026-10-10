@@ -82,18 +82,28 @@ static int16_t quantize(FormatChain* chain, int16_t sample) {
     return sample;
 }
 
-int16_t chain_process(FormatChain* chain, int16_t input) {
+int chain_decimate(FormatChain* chain, int16_t input, int16_t* output) {
     const int divisor = chain->format->divisor;
-    if (divisor == 1) return quantize(chain, input);
-
+    if (divisor == 1) {
+        *output = input;
+        return 1;
+    }
     chain->history[chain->historyPos] = input;
     chain->historyPos = (chain->historyPos + 1) & (CHAIN_HISTORY - 1);
+    if (++chain->phase < divisor) return 0;
+    chain->phase = 0;
+    *output = filtered(chain);
+    return 1;
+}
 
-    if (++chain->phase == divisor) {
-        chain->phase = 0;
+int16_t chain_process(FormatChain* chain, int16_t input) {
+    int16_t decimated;
+    if (chain_decimate(chain, input, &decimated)) {
         chain->previous = chain->current;
-        chain->current = quantize(chain, filtered(chain));
+        chain->current = quantize(chain, decimated);
     }
+    const int divisor = chain->format->divisor;
+    if (divisor == 1) return chain->current;
     int32_t step = chain->current - chain->previous;
     return (int16_t)(chain->previous + step * chain->phase / divisor);
 }

@@ -40,5 +40,7 @@ typedef struct {
 
 void chain_init(FormatChain* chain, const ChainFormat* format);
 int16_t chain_process(FormatChain* chain, int16_t input);
+// The low-pass and decimation step alone: returns 1 when *output holds a new sample at the format's rate.
+int chain_decimate(FormatChain* chain, int16_t input, int16_t* output);
 
 #endif

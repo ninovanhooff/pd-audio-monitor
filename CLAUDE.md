@@ -15,8 +15,11 @@ that compile `shared/codec` sources by absolute path (the SDK's `common.mk` plac
 export PLAYDATE_SDK_PATH=~/Developer/PlaydateSDK   # Linux SDK: download.panic.com/playdate_sdk/Linux/
 make -C line-in-monitor
 make -C probes/playback-probe
+make -C usb-stream/receiver && make -C usb-stream/host   # Playdate app; libpdstream for pdstream.py
 shared/codec/tests/run_tests.sh       # ffmpeg required; audioop (pip install audioop-lts) and pdc optional
+usb-stream/tests/run_tests.sh         # ffmpeg, numpy
 line-in-monitor/tests/sim_e2e.sh      # headless Linux: Xvfb, xdotool, ImageMagick, pulseaudio, numpy
+usb-stream/tests/sim_e2e.sh           # same, replaying recorded packets (the Simulator has no serial input)
 ```
 
 Device builds need `arm-none-eabi-gcc` (on Ubuntu: `gcc-arm-none-eabi libnewlib-arm-none-eabi`).
@@ -28,6 +31,7 @@ Device builds need `arm-none-eabi-gcc` (on Ubuntu: `gcc-arm-none-eabi libnewlib-
 - The device FPU is single precision: keep `double` out of hot paths.
 - Button glyphs (Ⓐ Ⓑ ✛ ⬆ ➡ ⬇ ⬅ 🎣 ⊙ 🔒 🟨, drawn with `kUTF8Encoding`) are complete only in
   `Asheville-Sans-14-Light`. Asheville Bold has none of them, and the Roobert fonts lack most.
+- The `msg` packet layout lives in both `usb-stream/receiver/src/packet.h` and `usb-stream/host/pdstream.py`.
 - `requestMicAccess` (SDK 3.1) must be called before `setMicCallback`.
 - Simulator first run shows dialogs and the mic prompt; `sim_e2e.sh` seeds
   `Disk/Data/<bundleID>/Permissions` and the Simulator ini to skip them.
