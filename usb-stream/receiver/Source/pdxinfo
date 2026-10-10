@@ -2,5 +2,5 @@ name=USB Stream
 author=Nino van Hooff
 description=Plays audio streamed from a Mac over USB, encoded in a Playdate audio format.
 bundleID=nl.ninovanhooff.usbstream
-version=0.1
+version=1.0
 buildNumber=1

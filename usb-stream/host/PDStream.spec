@@ -11,7 +11,7 @@ exe = EXE(PYZ(analysis.pure), analysis.scripts, exclude_binaries=True, name="PDS
 app = BUNDLE(COLLECT(exe, analysis.binaries, analysis.datas, name="PDStream-app"), name="PDStream.app",
              bundle_identifier=bundle_id,
              info_plist={
-                 "CFBundleShortVersionString": "0.1",
+                 "CFBundleShortVersionString": "1.0",
                  "NSMicrophoneUsageDescription":
                      "PDStream captures BlackHole, the virtual audio device your Mac plays into, to stream it to "
                      "the Playdate. macOS treats every audio input as a microphone.",
