@@ -297,6 +297,11 @@ static void drawMeter(int y) {
     int filled = (int)((ui.meterDb + 60.0f) / 60.0f * (float)width);
     pd->graphics->drawRect(x, y, width, height, kColorBlack);
     pd->graphics->fillRect(x, y, filled, height, kColorBlack);
+    if (ui.shownDb > -60) {
+        int holdX = x + (int)((ui.shownDb + 60.0f) / 60.0f * (float)width);
+        if (holdX > x + width - 1) holdX = x + width - 1;
+        pd->graphics->drawLine(holdX, y + 1, holdX, y + height - 2, 1, holdX < x + filled ? kColorWhite : kColorBlack);
+    }
     for (int mark = -48; mark < 0; mark += 12) {
         int markX = x + (mark + 60) * width / 60;
         pd->graphics->drawLine(markX, y + height, markX, y + height + 3, 1, kColorBlack);

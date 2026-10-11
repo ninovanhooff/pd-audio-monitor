@@ -68,7 +68,7 @@ If the serial port is busy, quit the Playdate Simulator and Mirror; they also ta
 | Output Ⓑ | Speaker / headphones / both |
 | Link | `eval` packets and bytes arriving per second |
 | Buffer | Audio queued. Playback starts at 150 ms; above 400 ms it drops back to 150 ms (clock drift). |
-| meter | Peak level, or `CLIP` when the stream hits full scale |
+| meter | Peak level, with a 1 px line at the last half second's peak (the number), or `CLIP` when the stream hits full scale |
 | Dropouts | Lost packets (sequence gaps), buffer underruns and overruns |
 
 ## Formats and link load
