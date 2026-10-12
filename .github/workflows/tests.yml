@@ -6,24 +6,42 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# Only the tip of a branch or pull request is worth a result: a newer push cancels the run before it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   host-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      # A cache of the unpacked packages: apt's mirror round trip is the slow part of this job.
+      - uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: ffmpeg
+          version: 1.0
       - run: pip install numpy
       - run: shared/codec/tests/run_tests.sh
       - run: usb-stream/tests/run_tests.sh
 
   device-builds:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
+      # Arm's own tarball, which the action caches, rather than apt's gcc-arm-none-eabi and newlib.
+      - uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: 13.2.Rel1
+      # Not cached: the URL says `latest`, so no cache key can name what it holds.
       - name: Install the Playdate SDK
         run: |
           curl -fsSL https://download.panic.com/playdate_sdk/Linux/PlaydateSDK-latest.tar.gz | tar xz -C "$RUNNER_TEMP"

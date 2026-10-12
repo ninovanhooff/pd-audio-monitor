@@ -5,9 +5,16 @@ on:
   push:
     tags: ["v*"]
 
+# A macOS runner bills at ten times a Linux one, so a superseded run should stop costing. Each release
+# has a tag ref of its own and so never cancels another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows-host:
     runs-on: windows-latest
+    timeout-minutes: 30
     permissions:
       contents: write
     defaults:
@@ -36,6 +43,7 @@ jobs:
 
   macos-host:
     runs-on: macos-latest
+    timeout-minutes: 30
     permissions:
       contents: write
     defaults:
@@ -60,11 +68,14 @@ jobs:
 
   receiver:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
-      - run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
+      - uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: 13.2.Rel1
       - name: Install the Playdate SDK
         run: |
           curl -fsSL https://download.panic.com/playdate_sdk/Linux/PlaydateSDK-latest.tar.gz | tar xz -C "$RUNNER_TEMP"
