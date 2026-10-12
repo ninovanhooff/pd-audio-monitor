@@ -34,11 +34,13 @@ The screen shows each setting with its controls as Playdate button glyphs.
 | Ⓑ | Output: speaker / headphones / both |
 | ⬆ ⬇ 🎣 | Digital input gain (−30 to +30 dB) |
 
-Formats: every combination of 44.1 / 22.05 / 11.025 kHz with 16-bit, 8-bit and IMA ADPCM; 44.1 kHz
-16-bit is the bypass. Each format low-pass filters and decimates to its rate, quantizes with its
-codec (ADPCM: the shift-add rounding measured in the Simulator, Audacity's block sizes), then upsamples by linear
-interpolation like the Playdate does (see `probes/playback-probe`). The same chain runs on the Mac
-with `shared/codec/tests/chain_render`, so you can preview the effect on headphones.
+Formats: every combination of 44.1 / 22.05 / 11.025 kHz with 16-bit, 8-bit, IMA ADPCM and
+[QOA](https://qoaformat.org); 44.1 kHz 16-bit is the bypass. Each format low-pass filters and decimates
+to its rate, quantizes with its codec (ADPCM: the shift-add rounding measured in the Simulator,
+Audacity's block sizes; QOA: the reference encoder, which holds the sound back by one 20-sample slice),
+then upsamples by linear interpolation like the Playdate does (see `probes/playback-probe`). QOA is not
+a system format: it shows how a game that decodes `.qoa` files itself would sound. The same chain runs on
+the Mac with `shared/codec/tests/chain_render`, so you can preview the effect on headphones.
 
 ## Build
 
@@ -55,7 +57,7 @@ first launch.
 - `../shared/codec/tests/run_tests.sh`: codec and chain on the host.
 - `tests/sim_e2e.sh` (headless Linux; flaky, so disabled unless `RUN_FLAKY=1`): feeds a sweep into the Simulator's mic through PulseAudio,
   records the output, and checks it against `chain_render` (residual must be below −60 dB; it
-  measures about −83 dB).
+  measures about −83 dB, and −75 dB for QOA).
 
 ## Not yet verified on hardware
 
@@ -64,3 +66,5 @@ first launch.
 - Latency on device. The ring buffer primes at 256 samples (about 6 ms), plus the system's own
   buffers.
 - CPU headroom. The 11.025 kHz formats run a 127-tap FIR at the decimated rate (about 1.4 M MAC/s).
+  The QOA encoder tries 16 scalefactors for every 20-sample slice, stopping a try early once it can't win:
+  on the host that is 2 to 7 trial samples per sample, so at 44.1 kHz it costs the most.

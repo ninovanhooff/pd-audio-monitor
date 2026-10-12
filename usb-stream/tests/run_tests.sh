@@ -12,10 +12,11 @@ mkdir -p "$build"
 flags="-std=c11 -O2 -Wall -Wextra -Werror -I$codec -I$here/../receiver/src"
 make -s -C "$here/../host"
 cc $flags -o "$build/receive_commands" "$here/receive_commands.c" "$here/../receiver/src/packet.c" \
-    "$codec/format_stream.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" -lm
+    "$codec/format_stream.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" "$codec/qoa.c" -lm
 cc $flags -o "$build/meter_test" "$here/meter_test.c" -lm
 "$build/meter_test"
-cc $flags -o "$build/chain_render" "$codec/tests/chain_render.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" -lm
+cc $flags -o "$build/chain_render" "$codec/tests/chain_render.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" \
+    "$codec/qoa.c" -lm
 
 ffmpeg -v error -y -f lavfi -i "aevalsrc='0.4*sin(2*PI*(100+3000*t)*t)+0.1*(random(0)-0.5)':s=44100:d=3" \
     -ac 2 -c:a pcm_s16le "$build/input.wav"
@@ -27,8 +28,11 @@ import numpy as np
 here, build = sys.argv[1], sys.argv[2]
 sys.path.insert(0, f"{here}/../host")
 import pdstream
-divisors = [1, 1, 1, 2, 2, 2, 4, 4, 4, 1, 1, 1, 2, 2, 2, 4, 4, 4]
-mono_formats = 9
+mono_divisors = [1, 1, 1, 2, 2, 2, 4, 4, 4, 1, 2, 4]
+divisors = mono_divisors * 2
+mono_formats = len(mono_divisors)
+first_qoa = 9
+qoa_slice = 20
 failed = False
 
 def check(name, ok, detail):
@@ -93,7 +97,9 @@ for fmt, divisor in enumerate(divisors):
     channels = 1 if fmt < mono_formats else 2
     ref = render(fmt, mono if channels == 1 else interleaved)
     out, counts = receive(sent)
-    delay = (divisor - 1) * channels
+    # QOA's encoder holds back a slice of the chain's output.
+    qoa = fmt % mono_formats >= first_qoa
+    delay = (divisor - 1 + (qoa_slice * divisor if qoa else 0)) * channels
     n = min(len(out), len(ref) - delay)
     check(f"{name}: received audio equals chain_render", n > 44100 * 2.9 * channels and
           np.array_equal(out[:n], ref[delay:delay + n]), f"{n} samples, {counts}")

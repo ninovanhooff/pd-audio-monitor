@@ -40,6 +40,10 @@ These degrade independently of the sample rate:
 - **8-bit** adds hiss and grit in quiet passages, fades, piano decays and reverb tails, at any rate.
 - **IMA ADPCM** has the most trouble with noisy, sharp high-frequency sounds like hi-hats and
   snares, where it adds roughness.
+- **QOA** is not a Playdate format: it shows a game that decodes `.qoa` files itself. It takes less
+  than ADPCM (about 3.3 bits a sample against 4). On synthetic signals it kept tones cleaner than ADPCM
+  did and fell behind on quiet noise ([numbers](approaches.md#qoa)), so check reverb tails and fade-outs
+  by ear. It has no code for zero, so digital silence turns into a faint ±1 LSB hiss, about −92 dBFS.
 
 ## Speaker or headphones
 

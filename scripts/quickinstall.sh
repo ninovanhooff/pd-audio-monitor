@@ -61,11 +61,15 @@ export PATH="$PLAYDATE_SDK_PATH/bin:$PATH"
 PDX="$(sed -nE 's/^PRODUCT[[:space:]]*=[[:space:]]*([^[:space:]]+).*/\1/p' "$APP_DIR/Makefile" | head -n 1)"
 [ -n "$PDX" ] || { echo "no PRODUCT in $APP_DIR/Makefile" >&2; exit 1; }
 
-# Starts the reboot now so the Data Disk mounts while we build.
-"$SCRIPT_DIR/reboot_datadisk.sh"
+# Starts the reboot in the background so the Data Disk mounts while we build, even if the Playdate
+# isn't connected yet; the wait below picks up its result.
+"$SCRIPT_DIR/reboot_datadisk.sh" &
+REBOOT_PID=$!
 
 echo "Building $APP_DIR ..."
 make -C "$APP_DIR"
+
+wait "$REBOOT_PID" || { echo "Couldn't put the Playdate into data disk mode" >&2; exit 1; }
 
 echo "Waiting for Data Disk to be mounted ... "
 until [ -d /Volumes/PLAYDATE/Games ]

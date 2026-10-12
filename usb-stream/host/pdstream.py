@@ -90,7 +90,7 @@ def settings_path():
 
 
 SETTINGS_MAGIC = "pdstream-settings"
-SETTINGS_VERSION = 1
+SETTINGS_VERSION = 2
 
 
 def load_settings(path=None):

@@ -8,7 +8,7 @@ would sound in a shipped audio format (default 22.05 kHz mono IMA ADPCM), while 
 | [`usb-stream/`](usb-stream/) | Mac (BlackHole) or Windows (VB-Cable) → `pdstream.py` → USB serial → PD Audio Monitor Receiver (Playdate app) → speaker, digital end to end | Bit-exact on the host; plays on hardware in every format |
 | [`line-in-monitor/`](line-in-monitor/) | Playdate app: headset mic input → format emulation → speaker. Plug the Mac's audio out in with a splitter. | Builds; verified in the Simulator; noisy input on hardware |
 | [`probes/playback-probe/`](probes/playback-probe/) | Playdate app that measures the system ADPCM rounding and upsampling the emulation copies | Simulator results in; run on device |
-| [`shared/codec/`](shared/codec/) | C: IMA ADPCM (WAV and `.pda` layouts), the format-emulation chain and its sender/receiver split, plus host tests against ffmpeg, `audioop` and pdc | Tested |
+| [`shared/codec/`](shared/codec/) | C: IMA ADPCM (WAV and `.pda` layouts), [QOA](https://qoaformat.org), the format-emulation chain and its sender/receiver split, plus host tests against ffmpeg, `audioop`, pdc and the QOA reference | Tested |
 | [`docs/approaches.md`](docs/approaches.md) | Analog line-in vs digital streaming (virtual device / process tap, USB serial `msg`/`eval`, Wi-Fi), with what we've measured | |
 | [`docs/choosing-a-format.md`](docs/choosing-a-format.md) | Which music each sample rate, bit depth and codec degrades, and how to hear it | |
 

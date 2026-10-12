@@ -4,13 +4,16 @@
 #include <stdint.h>
 
 #include "ima_adpcm.h"
+#include "qoa.h"
 
 // Turns 44.1 kHz mono input into what the same audio sounds like after shipping in a Playdate
 // format: decimate to the format's rate, quantize with its codec, interpolate back to 44.1 kHz.
 // Playdate rounds ADPCM by shift-add and upsamples by linear interpolation (measured in the
-// Simulator by probes/playback-probe).
+// Simulator by probes/playback-probe). QOA is not a system format: the chain assumes a game that decodes it
+// and plays it the same way. Its encoder needs a whole 20-sample slice, so chain_process delays QOA by one
+// slice (QOA_SLICE_SAMPLES samples at the format's rate).
 
-typedef enum { CODEC_PCM16, CODEC_PCM8, CODEC_ADPCM } ChainCodec;
+typedef enum { CODEC_PCM16, CODEC_PCM8, CODEC_ADPCM, CODEC_QOA } ChainCodec;
 
 // name is for the host, deviceName for the Playdate's small screen. A stereo format runs one chain per
 // channel; chain_process and the rest of this header handle a single channel.
@@ -23,7 +26,8 @@ typedef struct {
     int channels;
 } ChainFormat;
 
-// Mono formats come first. No 44.1 kHz 16-bit stereo: it needs twice the USB link's capacity.
+// samplesPerBlock is a block of ADPCM or a frame of QOA (a multiple of QOA_SLICE_SAMPLES).
+// Mono formats come first.
 extern const ChainFormat chain_formats[];
 extern const int chain_format_count;
 extern const int chain_mono_format_count;
@@ -42,6 +46,9 @@ typedef struct {
     int16_t previous;
     int16_t current;
     ImaAdpcmState adpcm;
+    QoaEncoder qoa;
+    int16_t qoaPending[QOA_SLICE_SAMPLES];
+    int16_t qoaDecoded[QOA_SLICE_SAMPLES];
     int blockPos;
 } FormatChain;
 

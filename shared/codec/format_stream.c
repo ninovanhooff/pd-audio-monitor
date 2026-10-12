@@ -10,11 +10,15 @@ static int channel_unit_bytes(const ChainFormat* format) {
         return 1;
     case CODEC_ADPCM:
         return IMA_ADPCM_BLOCK_BYTES(format->samplesPerBlock);
+    case CODEC_QOA:
+        break;
     }
     return 1;
 }
 
 int stream_unit_bytes(const ChainFormat* format) {
+    if (format->codec == CODEC_QOA)
+        return QOA_FRAME_BYTES(format->channels, format->samplesPerBlock / QOA_SLICE_SAMPLES);
     return format->channels * channel_unit_bytes(format);
 }
 
@@ -25,7 +29,10 @@ static int16_t clamp16(int32_t value) {
 }
 
 void stream_encoder_init(StreamEncoder* encoder, const ChainFormat* format) {
-    for (int c = 0; c < format->channels; c++) chain_init(&encoder->chains[c], format);
+    for (int c = 0; c < format->channels; c++) {
+        chain_init(&encoder->chains[c], format);
+        qoa_encoder_init(&encoder->qoa[c]);
+    }
     encoder->count = 0;
 }
 
@@ -55,6 +62,15 @@ int stream_encode(StreamEncoder* encoder, const int16_t* frame, uint8_t* out) {
             size += ima_adpcm_encode_block(&encoder->chains[c].adpcm, encoder->block[c], format->samplesPerBlock,
                                            IMA_LAYOUT_WAV, out + size);
         return size;
+    case CODEC_QOA: {
+        for (int c = 0; c < format->channels; c++) encoder->block[c][encoder->count] = sample[c];
+        if (++encoder->count < format->samplesPerBlock) return 0;
+        encoder->count = 0;
+        const int16_t* planes[STREAM_MAX_CHANNELS];
+        for (int c = 0; c < format->channels; c++) planes[c] = encoder->block[c];
+        return qoa_encode_frame(encoder->qoa, format->channels, 44100 / format->divisor, planes,
+                                format->samplesPerBlock, out);
+    }
     }
     return 0;
 }
@@ -110,6 +126,10 @@ int stream_decode(StreamDecoder* decoder, uint8_t byte, int16_t* out) {
         case CODEC_ADPCM:
             ima_adpcm_decode_block(unit, format->samplesPerBlock, IMA_ROUNDING_SHIFT_ADD, IMA_LAYOUT_WAV,
                                    decoder->decoded[c]);
+            samples = format->samplesPerBlock;
+            break;
+        case CODEC_QOA:
+            qoa_decode_channel(decoder->unit, format->channels, c, format->samplesPerBlock, decoder->decoded[c]);
             samples = format->samplesPerBlock;
             break;
         }

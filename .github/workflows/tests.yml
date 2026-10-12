@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install numpy
+      - run: shared/codec/tests/run_tests.sh
+      - run: usb-stream/tests/run_tests.sh
+
+  device-builds:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
+      - name: Install the Playdate SDK
+        run: |
+          curl -fsSL https://download.panic.com/playdate_sdk/Linux/PlaydateSDK-latest.tar.gz | tar xz -C "$RUNNER_TEMP"
+          echo "PLAYDATE_SDK_PATH=$(echo "$RUNNER_TEMP"/PlaydateSDK-*)" >> "$GITHUB_ENV"
+      - run: make -C usb-stream/receiver
+      - run: make -C line-in-monitor

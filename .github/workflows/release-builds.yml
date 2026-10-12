@@ -23,6 +23,7 @@ jobs:
       - run: >
           gcc -std=c11 -O2 -Wall -Wextra -shared -static-libgcc -I../../shared/codec -o libpdstream.dll
           encoder.c ../../shared/codec/format_stream.c ../../shared/codec/format_chain.c ../../shared/codec/ima_adpcm.c
+          ../../shared/codec/qoa.c
       - run: python -m PyInstaller --noconfirm --log-level WARN --workpath build/app --distpath dist host.spec
       - run: 7z a "PD-Audio-Monitor-Host-${GITHUB_REF_NAME}-windows-x64.zip" "./dist/PD Audio Monitor Host.exe"
       - uses: actions/upload-artifact@v7

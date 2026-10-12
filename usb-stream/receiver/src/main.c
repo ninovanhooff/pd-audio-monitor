@@ -212,16 +212,28 @@ static void requestFormat(void) {
     ui.lastRequestMs = now;
 }
 
-// The formats as a grid: sample rate rises to the right, bits per sample rise upward; each cell has a
-// mono and a stereo format, except 44.1 kHz 16-bit stereo.
+// The formats as a grid: sample rate rises to the right, bits per sample rise upward (QOA's 3.2 at the bottom);
+// each cell has a mono and a stereo format.
+#define RATE_COUNT 3
+#define CODEC_COUNT 4
+
 static int rateRank(int format) {
     int divisor = chain_formats[format].divisor;
     return divisor == 1 ? 2 : divisor == 2 ? 1 : 0;
 }
 
 static int codecRank(int format) {
-    ChainCodec codec = chain_formats[format].codec;
-    return codec == CODEC_PCM16 ? 2 : codec == CODEC_PCM8 ? 1 : 0;
+    switch (chain_formats[format].codec) {
+    case CODEC_PCM16:
+        return 3;
+    case CODEC_PCM8:
+        return 2;
+    case CODEC_ADPCM:
+        return 1;
+    case CODEC_QOA:
+        return 0;
+    }
+    return 0;
 }
 
 static int findFormat(int rate, int codec, int channels) {
@@ -238,9 +250,9 @@ static void stepFormat(int rateStep, int codecStep, int channelsToggle) {
     int rate = rateRank(current), codec = codecRank(current), channels = chain_formats[current].channels;
     if (channelsToggle) channels = 3 - channels;
     int found = -1;
-    for (int tries = 0; tries < 3 && found < 0; tries++) {
-        rate = (rate + rateStep + 3) % 3;
-        codec = (codec + codecStep + 3) % 3;
+    for (int tries = 0; tries < CODEC_COUNT && found < 0; tries++) {
+        rate = (rate + rateStep + RATE_COUNT) % RATE_COUNT;
+        codec = (codec + codecStep + CODEC_COUNT) % CODEC_COUNT;
         found = findFormat(rate, codec, channels);
         if (!rateStep && !codecStep) break;
     }
@@ -375,7 +387,7 @@ static void drawMeter(int y) {
 // the pre-fill option. A file of another version is ignored.
 #define SETTINGS_FILE "settings.bin"
 #define SETTINGS_MAGIC 0x5D
-#define SETTINGS_VERSION 2
+#define SETTINGS_VERSION 3
 static int savedFormat = -1;
 static int savedPrefill = PREFILL_DEFAULT_OPTION;
 

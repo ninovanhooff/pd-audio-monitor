@@ -16,7 +16,7 @@ rm -f "$data/settings.bin"
 
 make -s -C "$here/../host"
 codec="$here/../../shared/codec"
-cc -std=c11 -O2 -o "$work/chain_render" "$codec/tests/chain_render.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" -lm
+cc -std=c11 -O2 -o "$work/chain_render" "$codec/tests/chain_render.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" "$codec/qoa.c" -lm
 
 ini="$HOME/.config/Playdate Simulator/Playdate Simulator.ini"
 grep -q ShowPerfWarning "$ini" 2>/dev/null || printf 'ShowPerfWarning=0\nShowElist=0\n' >> "$ini"
@@ -49,6 +49,7 @@ run() {
 
 run 5
 run 7
+run 10
 rm -f "$data/replay.bin"
 
 python3 - "$work" <<'PY'
@@ -56,7 +57,7 @@ import sys, numpy as np
 work = sys.argv[1]
 rate, window = 44100, 11025
 failed = False
-for fmt in (5, 7):
+for fmt in (5, 7, 10):
     rec = np.fromfile(f"{work}/out{fmt}.raw", "<i2").astype(float)
     ref = np.fromfile(f"{work}/ref{fmt}.raw", "<i2").astype(float)
     # Align a stretch of the recording within the reference, then compare 1 s windows.

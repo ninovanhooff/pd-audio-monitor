@@ -64,7 +64,7 @@ If the serial port is busy, quit the Playdate Simulator and Mirror; they also ta
 
 | Row | Shows |
 | --- | --- |
-| Format ✛Ⓐ | Format of the incoming stream, such as `22kHz 8bit 1ch`. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM), Ⓐ switches between 1 and 2 channels; the Playdate asks `pdstream.py` to switch and shows `...` until it does. The rate and codec wrap around. `--format` sets the starting format, and the host app's Format menu switches it too |
+| Format ✛Ⓐ | Format of the incoming stream, such as `22kHz 8bit 1ch`. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM, QOA), Ⓐ switches between 1 and 2 channels; the Playdate asks `pdstream.py` to switch and shows `...` until it does. The rate and codec wrap around. `--format` sets the starting format, and the host app's Format menu switches it too |
 | Output Ⓑ | Speaker / headphones / both |
 | Link | `eval` packets and bytes arriving per second |
 | Buffer | Audio queued, refreshed every half second. Playback starts once the pre-fill is queued (50 ms; the system menu's **Pre-fill** sets 10 to 300 ms in 10 ms steps); beyond the pre-fill plus 250 ms it drops back to the pre-fill (clock drift). |
@@ -94,21 +94,33 @@ number; a file that doesn't match is ignored, not loaded, and replaced on the ne
 | 6 | 11.025 kHz 16-bit mono | 11kHz 16bit 1ch | 22 | 24 |
 | 7 | 11.025 kHz 8-bit mono | 11kHz 8bit 1ch | 11 | 12 |
 | 8 | 11.025 kHz IMA ADPCM mono | 11kHz ADPCM 1ch | 6 | 6.1 |
-| 9 | 44.1 kHz 16-bit stereo (bypass) | 44kHz 16bit 2ch (bypass) | 173 | 192 |
-| 10 | 44.1 kHz 8-bit stereo | 44kHz 8bit 2ch | 87 | 96 |
-| 11 | 44.1 kHz IMA ADPCM stereo | 44kHz ADPCM 2ch | 44 | 48 |
-| 12 | 22.05 kHz 16-bit stereo | 22kHz 16bit 2ch | 87 | 96 |
-| 13 | 22.05 kHz 8-bit stereo | 22kHz 8bit 2ch | 44 | 48 |
-| 14 | 22.05 kHz IMA ADPCM stereo | 22kHz ADPCM 2ch | 22 | 24 |
-| 15 | 11.025 kHz 16-bit stereo | 11kHz 16bit 2ch | 44 | 48 |
-| 16 | 11.025 kHz 8-bit stereo | 11kHz 8bit 2ch | 22 | 24 |
-| 17 | 11.025 kHz IMA ADPCM stereo | 11kHz ADPCM 2ch | 11 | 12 |
+| 9 | 44.1 kHz QOA mono | 44kHz QOA 1ch | 18 | 20 |
+| 10 | 22.05 kHz QOA mono | 22kHz QOA 1ch | 9 | 10 |
+| 11 | 11.025 kHz QOA mono | 11kHz QOA 1ch | 5 | 5.4 |
+| 12 | 44.1 kHz 16-bit stereo (bypass) | 44kHz 16bit 2ch (bypass) | 173 | 192 |
+| 13 | 44.1 kHz 8-bit stereo | 44kHz 8bit 2ch | 87 | 96 |
+| 14 | 44.1 kHz IMA ADPCM stereo | 44kHz ADPCM 2ch | 44 | 48 |
+| 15 | 22.05 kHz 16-bit stereo | 22kHz 16bit 2ch | 87 | 96 |
+| 16 | 22.05 kHz 8-bit stereo | 22kHz 8bit 2ch | 44 | 48 |
+| 17 | 22.05 kHz IMA ADPCM stereo | 22kHz ADPCM 2ch | 22 | 24 |
+| 18 | 11.025 kHz 16-bit stereo | 11kHz 16bit 2ch | 44 | 48 |
+| 19 | 11.025 kHz 8-bit stereo | 11kHz 8bit 2ch | 22 | 24 |
+| 20 | 11.025 kHz IMA ADPCM stereo | 11kHz ADPCM 2ch | 11 | 12 |
+| 21 | 44.1 kHz QOA stereo | 44kHz QOA 2ch | 35 | 39 |
+| 22 | 22.05 kHz QOA stereo | 22kHz QOA 2ch | 18 | 20 |
+| 23 | 11.025 kHz QOA stereo | 11kHz QOA 2ch | 10 | 11 |
 
 A Playdate takes at least 86 `eval`s a second (measured with the mono bypass), which carries every
 format but the stereo bypass; that one needs twice as many, more than has been measured. Stereo
 formats carry each channel on its own, like a stereo WAV: two samples per unit for PCM, two ADPCM
-blocks per unit. In a mono format, the host mixes the left and right inputs to one channel. The
-speaker mixes both channels to mono, so stereo matters on headphones.
+blocks per unit. A QOA unit is one frame of QOA's own layout with the channels' slices interleaved,
+short of the format's 256 slices per frame: 100, 50 or 25, so a unit lasts about as long as an ADPCM
+block. In a mono format, the host mixes the left and right inputs to one channel. The speaker mixes
+both channels to mono, so stereo matters on headphones.
+
+QOA is not a Playdate system format. Its formats show how your music would sound in a game that
+ships `.qoa` files and decodes them itself, upsampling linearly as the system does for lower rates.
+A `.qoa` file takes 3.2 bits per sample plus a little for headers; the shorter frames here cost more.
 
 ## Development
 
@@ -164,7 +176,7 @@ Building needs the Xcode command line tools, and the receiver needs the Playdate
 Install Python, MinGW-w64 gcc and `pip install numpy pyserial sounddevice pyinstaller`, then:
 
 ```bash
-gcc -std=c11 -O2 -shared -static-libgcc -Ishared/codec -o usb-stream/host/libpdstream.dll usb-stream/host/encoder.c shared/codec/format_stream.c shared/codec/format_chain.c shared/codec/ima_adpcm.c
+gcc -std=c11 -O2 -shared -static-libgcc -Ishared/codec -o usb-stream/host/libpdstream.dll usb-stream/host/encoder.c shared/codec/format_stream.c shared/codec/format_chain.c shared/codec/ima_adpcm.c shared/codec/qoa.c
 cd usb-stream/host && python -m PyInstaller --noconfirm --workpath build/app --distpath dist host.spec
 ```
 
@@ -188,7 +200,7 @@ tag for a release that already exists, and it attaches all three zips.
   and replay fill that follow from them (all inside the ring), and the level meter's rise and fall.
 - `tests/sim_e2e.sh` (headless Linux): the Simulator has no serial input, so the receiver replays
   recorded commands from `replay.bin` in its data folder, taking the packets out of the bytecode.
-  The check records its output and compares it with `chain_render` (−82 dB residual).
+  The check records its output and compares it with `chain_render` (−82 dB residual; −83 dB for the 22.05 kHz QOA format).
 
 ## Protocol
 
@@ -206,7 +218,7 @@ has to be sideloaded.
 | 0 | Format number (`chain_formats` index) |
 | 1 | Sequence number, wrapping at 256 |
 | 2–3 | Offset of the first data byte within its unit (uint16 LE, bits 0–14); bit 15 is set on the first packet of a stream |
-| 4… | Stream bytes: 16-bit LE or 8-bit signed samples at the format's rate, or WAV-layout ADPCM blocks |
+| 4… | Stream bytes: 16-bit LE or 8-bit signed samples at the format's rate, WAV-layout ADPCM blocks, or QOA frames |
 
 Both show their version (`PD Audio Monitor Receiver v1.2` on the Playdate's screen, in the host's window title
 and log), so you can check they match; the host repeats it when it waits for a receiver. It is set once, in
@@ -226,7 +238,7 @@ sequence numbers running. When the Playdate's system menu opens, the receiver lo
 once the menu closes.
 
 After a gap in the sequence numbers, the receiver skips to the next unit boundary and goes on.
-For ADPCM that is the next block. A new format number restarts the decoder, and so does the restart bit: the host sets it after
+For ADPCM and QOA that is the next block or frame, each of which carries its predictor state. A new format number restarts the decoder, and so does the restart bit: the host sets it after
 the Playdate's menu closes, when its encoder starts over at a unit boundary without a gap in the sequence numbers.
 
 Why C: Lua can't feed PCM to the audio engine, so the `eval` packets go straight to a C function.
