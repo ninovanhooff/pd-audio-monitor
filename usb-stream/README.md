@@ -198,7 +198,9 @@ has to be sideloaded.
 
 The other way, the receiver logs `pdstream format <n>` to its console, which goes out over USB, once
 a second until the stream arrives in that format. `pdstream.py` switches its encoder and keeps the
-sequence numbers running.
+sequence numbers running. When the Playdate's system menu opens, the receiver logs
+`pdstream format -1`: the host stops sending until the receiver asks for a format again, which it does
+once the menu closes.
 
 After a gap in the sequence numbers, the receiver skips to the next unit boundary and goes on.
 For ADPCM that is the next block. A new format number restarts the decoder.

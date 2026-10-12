@@ -24,7 +24,8 @@ PLAYDATE_VID = 0x1331
 # VoiceMeeter's virtual output.
 PREFERRED_DEVICES = ("CABLE Output", "VoiceMeeter Output") if sys.platform == "win32" else ("BlackHole",)
 # The receiver logs this over USB when the user picks a format on the Playdate.
-FORMAT_REQUEST = re.compile(rb"pdstream format (\d+)")
+# Format -1 asks the host to stop sending: the Playdate is paused, and the eval stream would swamp it.
+FORMAT_REQUEST = re.compile(rb"pdstream format (-?\d+)")
 # Packet layout is in usb-stream/receiver/src/packet.h.
 HEADER_BYTES = 4
 PACKET_BYTES = 1024
@@ -117,6 +118,7 @@ class Codec:
 
     def __init__(self, lib, fmt):
         self.lib = lib
+        self.paused = False
         self.encoder = self.packetizer = None
         self.switch(fmt)
 
@@ -239,6 +241,8 @@ class SerialSink:
             return True
         except (self.serial.SerialException, OSError):
             port, self.port = self.port, None
+            # A request from before the Playdate went has no say over what it gets when it returns.
+            self.requested_format = None
             try:
                 port.close()
             except (self.serial.SerialException, OSError):
@@ -288,12 +292,22 @@ class Stats:
 
 
 def follow_playdate(codec, sink, stats, names):
+    """Applies the Playdate's latest format request; returns whether the stream is paused."""
     fmt = sink.requested_format
-    if fmt is None or fmt == codec.format or not 0 <= fmt < len(names):
-        return
-    codec.switch(fmt)
-    stats.name = names[fmt]
-    console.log(f"Playdate picked format {fmt}: {names[fmt]}")
+    if fmt == -1:
+        if not codec.paused:
+            codec.paused = True
+            console.log("Playdate paused: not sending until it asks for a format")
+        # Nothing else is written while paused, so this is how a Playdate that has gone is noticed.
+        sink.write([b"\n"])
+    elif fmt is None:
+        codec.paused = False
+    elif fmt is not None and 0 <= fmt < len(names) and (fmt != codec.format or codec.paused):
+        codec.switch(fmt)
+        codec.paused = False
+        stats.name = names[fmt]
+        console.log(f"Playdate picked format {fmt}: {names[fmt]}")
+    return codec.paused
 
 
 def read_wav(path):
@@ -311,9 +325,9 @@ def stream_file(path, codec, sink, stats, names, paced):
     for offset in range(0, len(frames), BLOCK):
         part = frames[offset:offset + BLOCK]
         last = offset + BLOCK >= len(frames)
-        follow_playdate(codec, sink, stats, names)
-        commands = codec.commands(part, flush=last)
-        sent = sink.write(commands)
+        paused = follow_playdate(codec, sink, stats, names)
+        commands = [] if paused else codec.commands(part, flush=last)
+        sent = bool(commands) and sink.write(commands)
         stats.add(part, commands if sent else [])
         if paced:
             delay = start + (offset + BLOCK) / RATE - time.monotonic()
@@ -449,9 +463,9 @@ def stream_device(name, codec, sink, stats, names, stop=None):
                 frames = blocks.get(timeout=0.5)
             except queue.Empty:
                 continue
-            follow_playdate(codec, sink, stats, names)
-            commands = codec.commands(frames)
-            sent = sink.write(commands)
+            paused = follow_playdate(codec, sink, stats, names)
+            commands = [] if paused else codec.commands(frames)
+            sent = bool(commands) and sink.write(commands)
             stats.add(frames, commands if sent else [])
             if blocks.qsize() > 20:
                 console.log("Falling behind: the serial link is slower than this format needs.")

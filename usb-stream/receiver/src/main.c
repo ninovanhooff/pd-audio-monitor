@@ -31,6 +31,9 @@ static volatile uint32_t underruns;
 static volatile uint32_t overruns;
 
 static PacketReceiver receiver;
+static SoundSource* source;
+// Set while the system menu is up: the source is removed and packets that still arrive are dropped.
+static int paused;
 // Test hook: `eval` commands that pdstream.py --out recorded, fed in as fast as they play.
 static SDFile* replay;
 
@@ -42,6 +45,7 @@ static struct {
     int wantedFormat;
     unsigned int lastRequestMs;
     unsigned int matchedSinceMs;
+    unsigned int resumedAtMs;
     int peak;
     int clipped;
     float meterDb;
@@ -76,6 +80,7 @@ static void emitFrames(void* context, const int16_t* frames, int count, int chan
 }
 
 static void receive(const uint8_t* packet, int length) {
+    if (paused) return;
     if (packet_receive(&receiver, packet, length, emitFrames, NULL))
         ui.lastPacketMs = pd->system->getCurrentTimeMilliseconds();
 }
@@ -179,6 +184,18 @@ static int isReceiving(void) {
 // request stays until the stream has held the new format for a while.
 static void requestFormat(void) {
     unsigned int now = pd->system->getCurrentTimeMilliseconds();
+    if (ui.resumedAtMs) {
+        // The host stopped when the menu opened; ask until packets flow again. Old packets still queued on
+        // the link don't count: the stream must have run for a while.
+        if (now - ui.resumedAtMs > 2000 && now - ui.lastPacketMs < 500) {
+            ui.resumedAtMs = 0;
+        } else if (now - ui.lastRequestMs >= 1000) {
+            int format = ui.wantedFormat >= 0 ? ui.wantedFormat : receiver.format >= 0 ? receiver.format : chain_default_format;
+            pd->system->logToConsole("pdstream format %d", format);
+            ui.lastRequestMs = now;
+        }
+        return;
+    }
     if (ui.wantedFormat >= 0 && ui.wantedFormat == receiver.format) {
         if (ui.matchedSinceMs == 0) ui.matchedSinceMs = now;
         if (now - ui.matchedSinceMs > 1500) ui.wantedFormat = -1;
@@ -318,6 +335,31 @@ static void drawMeter(int y) {
     }
 }
 
+static void startSource(void) {
+    // Nothing plays between the old buffer and the new stream.
+    readPos = writePos;
+    primed = 0;
+    applyOutput();
+    source = pd->sound->addSource(sourceCallback, NULL, 1);
+}
+
+static void pauseStream(void) {
+    paused = 1;
+    // The update callback doesn't run while paused, so this is the one chance to ask the host to stop.
+    pd->system->logToConsole("pdstream format -1");
+    if (!source) return;
+    pd->sound->removeSource(source);
+    source = NULL;
+}
+
+static void resumeStream(void) {
+    paused = 0;
+    unsigned int now = pd->system->getCurrentTimeMilliseconds();
+    ui.resumedAtMs = now ? now : 1;
+    ui.lastRequestMs = now - 1000;
+    if (!source) startSource();
+}
+
 static int update(void* userdata) {
     (void)userdata;
     feedReplay();
@@ -355,6 +397,12 @@ __declspec(dllexport)
 #endif
 int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     (void)arg;
+    if (event == kEventPause || event == kEventResume) {
+        if (!pd) return 0;
+        if (event == kEventPause) pauseStream();
+        else resumeStream();
+        return 0;
+    }
     // Setting up at kEventInitLua, after the Lua runtime starts: a C update callback set at
     // kEventInit keeps it from starting, and `eval` needs it.
     if (event != kEventInitLua) return 0;
@@ -378,8 +426,7 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     pd->system->setAutoLockDisabled(1);
     pd->display->setRefreshRate(50);
     pd->sound->getHeadphoneState(NULL, NULL, headphoneChanged);
-    applyOutput();
-    pd->sound->addSource(sourceCallback, NULL, 1);
+    startSource();
     replay = pd->file->open("replay.bin", kFileReadData);
 
     pd->system->setUpdateCallback(update, NULL);
