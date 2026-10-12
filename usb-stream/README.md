@@ -67,7 +67,7 @@ If the serial port is busy, quit the Playdate Simulator and Mirror; they also ta
 | Format ✛Ⓐ | Format of the incoming stream, such as `22kHz 8bit 1ch`. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM), Ⓐ switches between 1 and 2 channels; the Playdate asks `pdstream.py` to switch and shows `...` until it does. The rate and codec wrap around. `--format` sets the starting format, and the host app's Format menu switches it too |
 | Output Ⓑ | Speaker / headphones / both |
 | Link | `eval` packets and bytes arriving per second |
-| Buffer | Audio queued, refreshed every half second. Playback starts once the pre-fill is queued (150 ms; the system menu's **Pre-fill** sets 50 to 300 ms in 10 ms steps); beyond the pre-fill plus 250 ms it drops back to the pre-fill (clock drift). |
+| Buffer | Audio queued, refreshed every half second. Playback starts once the pre-fill is queued (50 ms; the system menu's **Pre-fill** sets 10 to 300 ms in 10 ms steps); beyond the pre-fill plus 250 ms it drops back to the pre-fill (clock drift). |
 | meter | Peak level, labelled in dB from -48 to 0. The bar rises at once and falls 20 dB per second; a 1 px line marks the last half second's peak (the number), or `CLIP` shows when the stream hits full scale |
 | Dropouts | Lost packets (sequence gaps), buffer underruns and overruns; reset to 0 when a stream starts or the format changes; shown at the bottom in place of the connection text |
 

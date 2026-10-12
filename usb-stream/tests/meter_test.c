@@ -23,11 +23,11 @@ int main(void) {
         fits &= max_fill_samples(prefill) < RING_SIZE && max_fill_samples(prefill) > prefill;
         replayAbove &= replay_fill_samples(prefill) > prefill && replay_fill_samples(prefill) < max_fill_samples(prefill);
     }
-    check("prefill options run 50..300 ms in 10 ms steps", stepsOk && PREFILL_OPTIONS == 26);
-    check("default option is 150 ms (6615 samples)",
-          prefill_samples(PREFILL_DEFAULT_OPTION) == 6615 && samples_to_ms(6615) == 150);
-    check("overrun threshold is prefill + 250 ms and fits the ring", fits && max_fill_samples(6615) == 6615 + 11025);
-    check("replay fill sits between prefill and overrun threshold", replayAbove && replay_fill_samples(6615) == 8820);
+    check("prefill options run 10..300 ms in 10 ms steps", stepsOk && PREFILL_OPTIONS == 30);
+    check("default option is 50 ms (2205 samples)",
+          prefill_samples(PREFILL_DEFAULT_OPTION) == 2205 && samples_to_ms(2205) == 50);
+    check("overrun threshold is prefill + 250 ms and fits the ring", fits && max_fill_samples(2205) == 2205 + 11025);
+    check("replay fill sits between prefill and overrun threshold", replayAbove && replay_fill_samples(2205) == 4410);
 
     check("meter rises instantly", near(meter_next_db(-40.0f, -10.0f, 20), -10.0f));
     check("meter falls 20 dB per second", near(meter_next_db(-10.0f, -60.0f, 500), -20.0f));

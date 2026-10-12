@@ -6,10 +6,10 @@
 
 // Buffer arithmetic at 44.1 kHz: 441 samples per 10 ms.
 #define SAMPLES_PER_10MS 441
-#define PREFILL_MIN_MS 50
+#define PREFILL_MIN_MS 10
 #define PREFILL_STEP_MS 10
-#define PREFILL_OPTIONS 26
-#define PREFILL_DEFAULT_OPTION 10 // 150 ms
+#define PREFILL_OPTIONS 30
+#define PREFILL_DEFAULT_OPTION 4 // 50 ms
 // Beyond prefill + this, the host's clock has run ahead, so playback drops back to the prefill.
 #define OVERRUN_MARGIN_SAMPLES 11025 // 250 ms
 // The replay keeps the buffer this far above the prefill so that it always primes.

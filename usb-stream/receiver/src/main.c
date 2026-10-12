@@ -364,7 +364,7 @@ static void drawMeter(int y) {
 // the pre-fill option. A file of another version is ignored.
 #define SETTINGS_FILE "settings.bin"
 #define SETTINGS_MAGIC 0x5D
-#define SETTINGS_VERSION 1
+#define SETTINGS_VERSION 2
 static int savedFormat = -1;
 static int savedPrefill = PREFILL_DEFAULT_OPTION;
 
@@ -509,9 +509,9 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     ui.lastSecond = pd->system->getCurrentTimeMilliseconds() / 1000;
 
     static const char* prefillTitles[PREFILL_OPTIONS] = {
-        "50 ms",  "60 ms",  "70 ms",  "80 ms",  "90 ms",  "100 ms", "110 ms", "120 ms", "130 ms",
-        "140 ms", "150 ms", "160 ms", "170 ms", "180 ms", "190 ms", "200 ms", "210 ms", "220 ms",
-        "230 ms", "240 ms", "250 ms", "260 ms", "270 ms", "280 ms", "290 ms", "300 ms"};
+        "10 ms", "20 ms", "30 ms", "40 ms", "50 ms", "60 ms", "70 ms", "80 ms", "90 ms", "100 ms", "110 ms",
+        "120 ms", "130 ms", "140 ms", "150 ms", "160 ms", "170 ms", "180 ms", "190 ms", "200 ms", "210 ms",
+        "220 ms", "230 ms", "240 ms", "250 ms", "260 ms", "270 ms", "280 ms", "290 ms", "300 ms"};
     prefillItem = pd->system->addOptionsMenuItem("Pre-fill", prefillTitles, PREFILL_OPTIONS, prefillChanged, NULL);
     loadSettings();
     pd->system->setMenuItemValue(prefillItem, savedPrefill);
