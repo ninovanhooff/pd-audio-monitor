@@ -2,6 +2,7 @@
 # Host checks: pdstream.py's eval commands, decoded by the receiver's own packet code, must equal
 # chain_render's output for every format, and the receiver must recover from lost packets. With pdc
 # on the PATH, the eval bytecode must equal pdc's.
+# The receiver's buffer and meter arithmetic (meter.h) is checked first.
 # Needs: cc, ffmpeg, python3 with numpy.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -12,6 +13,8 @@ flags="-std=c11 -O2 -Wall -Wextra -Werror -I$codec -I$here/../receiver/src"
 make -s -C "$here/../host"
 cc $flags -o "$build/receive_commands" "$here/receive_commands.c" "$here/../receiver/src/packet.c" \
     "$codec/format_stream.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" -lm
+cc $flags -o "$build/meter_test" "$here/meter_test.c" -lm
+"$build/meter_test"
 cc $flags -o "$build/chain_render" "$codec/tests/chain_render.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" -lm
 
 ffmpeg -v error -y -f lavfi -i "aevalsrc='0.4*sin(2*PI*(100+3000*t)*t)+0.1*(random(0)-0.5)':s=44100:d=3" \
