@@ -67,9 +67,11 @@ If the serial port is busy, quit the Playdate Simulator and Mirror; they also ta
 | Format ✛Ⓐ | Format of the incoming stream, such as `22kHz 8bit 1ch`. ⬅/➡ pick the sample rate, ⬆/⬇ the codec (more bits up: 16-bit, 8-bit, ADPCM), Ⓐ switches between 1 and 2 channels; the Playdate asks `pdstream.py` to switch and shows `...` until it does. The rate and codec wrap around. `--format` sets the starting format, and the host app's Format menu switches it too |
 | Output Ⓑ | Speaker / headphones / both |
 | Link | `eval` packets and bytes arriving per second |
-| Buffer | Audio queued. Playback starts at 150 ms; above 400 ms it drops back to 150 ms (clock drift). |
-| meter | Peak level, with a 1 px line at the last half second's peak (the number), or `CLIP` when the stream hits full scale |
-| Dropouts | Lost packets (sequence gaps), buffer underruns and overruns |
+| Buffer | Audio queued, refreshed every half second. Playback starts once the pre-fill is queued (150 ms; the system menu's **Pre-fill** sets 50 to 300 ms in 10 ms steps); beyond the pre-fill plus 250 ms it drops back to the pre-fill (clock drift). |
+| meter | Peak level, labelled in dB from -48 to 0. The bar rises at once and falls 20 dB per second; a 1 px line marks the last half second's peak (the number), or `CLIP` shows when the stream hits full scale |
+| Dropouts | Lost packets (sequence gaps), buffer underruns and overruns; reset to 0 when a stream starts or the format changes; shown at the bottom in place of the connection text |
+
+While no stream arrives, the bottom of the screen tells how to connect the computer.
 
 ## Formats and link load
 
@@ -174,6 +176,8 @@ tag for a release that already exists, and it attaches all three zips.
   the receiver's `packet.c` decodes them. Every format must equal `chain_render` bit for bit,
   decoding must recover after two dropped packets, and, with pdc on the PATH, the bytecode must
   equal pdc's.
+- `tests/meter_test.c` (built and run by `tests/run_tests.sh`): the pre-fill steps, the overrun threshold
+  and replay fill that follow from them (all inside the ring), and the level meter's rise and fall.
 - `tests/sim_e2e.sh` (headless Linux): the Simulator has no serial input, so the receiver replays
   recorded commands from `replay.bin` in its data folder, taking the packets out of the bytecode.
   The check records its output and compares it with `chain_render` (−82 dB residual).
