@@ -155,8 +155,8 @@ def interleave(left, right):
     return out
 
 
-def stream(fmt, samples):
-    out = subprocess.run([build / "stream_render", str(fmt)], input=struct.pack(f"<{len(samples)}h", *samples),
+def stream(fmt, samples, *options):
+    out = subprocess.run([build / "stream_render", str(fmt), *options], input=struct.pack(f"<{len(samples)}h", *samples),
                          capture_output=True, check=True).stdout
     return list(struct.unpack(f"<{len(out) // 2}h", out))
 
@@ -182,5 +182,34 @@ for fmt in range(MONO_FORMATS, len(FORMATS)):
         check(f"format {fmt}: {name} channels are independent",
               not any(right_silent[1:n:2]) and not any(left_silent[0:n:2]) and
               right_silent[0:n:2] == both[0:n:2] and left_silent[1:n:2] == both[1:n:2], f"{n // 2} frames")
+
+# 7. ADPCM-XQ: its blocks decode with the receiver's decoder, and quantize the filtered signal more closely
+# than the greedy encoder does. The reference is the same chain without quantization (the PCM16 format of the
+# same rate).
+ADPCM_FORMATS = (2, 5, 8, 11, 14, 17)
+PCM16_OF_DIVISOR = {1: (0, 9), 2: (3, 12), 4: (6, 15)}
+for fmt, divisor in enumerate(FORMATS):
+    if fmt not in ADPCM_FORMATS:
+        continue
+    channels = 1 if fmt < MONO_FORMATS else 2
+    signal_in = mix if channels == 1 else interleave(mix, other)
+    reference = render(PCM16_OF_DIVISOR[divisor][channels - 1], signal_in)
+    delay = (divisor - 1) * channels
+    errors = {}
+    for name, options in (("greedy", ()), ("ADPCM-XQ", ("xq",))):
+        decoded = stream(fmt, signal_in, *options)
+        n = min(len(decoded), len(reference) - delay)
+        errors[name] = rms([a - b for a, b in zip(decoded[:n], reference[delay:delay + n])])
+    check(f"format {fmt}: ADPCM-XQ quantizes closer than the greedy encoder",
+          errors["ADPCM-XQ"] < errors["greedy"],
+          f"error {errors['ADPCM-XQ']:.1f} vs {errors['greedy']:.1f} LSB rms")
+
+silence = [0] * len(mix)
+for fmt in (11, 14, 17):
+    right_silent = stream(fmt, interleave(mix, silence), "xq")
+    both = stream(fmt, interleave(mix, other), "xq")
+    n = min(len(right_silent), len(both))
+    check(f"format {fmt}: ADPCM-XQ channels are independent",
+          not any(right_silent[1:n:2]) and right_silent[0:n:2] == both[0:n:2], f"{n // 2} frames")
 
 sys.exit(1 if failures else 0)

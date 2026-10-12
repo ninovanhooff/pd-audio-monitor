@@ -75,7 +75,7 @@ While no stream arrives, the bottom of the screen tells how to connect the compu
 
 Both ends remember their settings across restarts. The receiver keeps the format and the pre-fill
 in `settings.bin` in its data folder, and asks the host for that format when it starts. The host app
-keeps its Input and Format in `settings.json` (macOS `~/Library/Application Support/PD Audio Monitor Host`,
+keeps its Input, Format and ADPCM-XQ choice in `settings.json` (macOS `~/Library/Application Support/PD Audio Monitor Host`,
 Windows `%APPDATA%\PD Audio Monitor Host`, Linux `~/.config/PD Audio Monitor Host`). If the remembered
 input isn't there, for example the cable was unplugged, the host says so in the log and falls back to the
 default input; the choice comes back once the input does. Both files start with a magic and a version
@@ -110,6 +110,15 @@ formats carry each channel on its own, like a stereo WAV: two samples per unit f
 blocks per unit. In a mono format, the host mixes the left and right inputs to one channel. The
 speaker mixes both channels to mono, so stereo matters on headphones.
 
+**ADPCM-XQ.** The host's ADPCM formats encode with a greedy encoder by default. The host app's
+**ADPCM-XQ** checkbox (`--adpcm-xq` on the command line) swaps in David Bryant's
+[ADPCM-XQ](https://github.com/dbry/adpcm-xq) look-ahead encoder (`shared/codec/adpcm_xq`, BSD-licensed),
+which picks each nibble by searching a few samples ahead. On the test signal it quantizes 1 to 2 dB closer
+than the greedy encoder, and the host encodes it at 86 times real time or better on a laptop (44.1 kHz stereo,
+the heaviest format). It changes only the encoder: the blocks are the same IMA ADPCM, so the receiver, the
+packets and the Playdate's screen are unchanged, and the receiver can't tell which encoder made them. Other formats
+ignore the option. The host app remembers it in `settings.json`.
+
 ## Development
 
 ### Build and run
@@ -138,6 +147,7 @@ Building needs the Xcode command line tools, and the receiver needs the Playdate
    ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py          # default 22.05 kHz IMA ADPCM
    ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py --help   # formats, --device, --port, --input file.wav
    ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py --format 0             # bypass
+   ~/.venvs/pdstream/bin/python usb-stream/host/pdstream.py --adpcm-xq             # ADPCM-XQ encoder
    ```
 
    Run this way, the microphone access belongs to the app running it (Terminal, iTerm, ...).
@@ -164,7 +174,7 @@ Building needs the Xcode command line tools, and the receiver needs the Playdate
 Install Python, MinGW-w64 gcc and `pip install numpy pyserial sounddevice pyinstaller`, then:
 
 ```bash
-gcc -std=c11 -O2 -shared -static-libgcc -Ishared/codec -o usb-stream/host/libpdstream.dll usb-stream/host/encoder.c shared/codec/format_stream.c shared/codec/format_chain.c shared/codec/ima_adpcm.c
+gcc -std=c11 -O2 -shared -static-libgcc -Ishared/codec -o usb-stream/host/libpdstream.dll usb-stream/host/encoder.c shared/codec/format_stream.c shared/codec/format_chain.c shared/codec/ima_adpcm.c shared/codec/adpcm_xq_encoder.c shared/codec/adpcm_xq/adpcm-lib.c shared/codec/adpcm_xq/adpcm-dns.c
 cd usb-stream/host && python -m PyInstaller --noconfirm --workpath build/app --distpath dist host.spec
 ```
 

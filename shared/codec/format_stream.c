@@ -27,6 +27,32 @@ static int16_t clamp16(int32_t value) {
 void stream_encoder_init(StreamEncoder* encoder, const ChainFormat* format) {
     for (int c = 0; c < format->channels; c++) chain_init(&encoder->chains[c], format);
     encoder->count = 0;
+    encoder->blockEncoder = NULL;
+    memset(encoder->blockContext, 0, sizeof(encoder->blockContext));
+}
+
+int stream_encoder_use_block_encoder(StreamEncoder* encoder, const StreamBlockEncoder* blockEncoder) {
+    const ChainFormat* format = encoder->chains[0].format;
+    if (format->codec != CODEC_ADPCM || encoder->count != 0) return 0;
+    stream_encoder_release(encoder);
+    for (int c = 0; c < format->channels; c++) {
+        encoder->blockContext[c] = blockEncoder->create(format);
+        if (!encoder->blockContext[c]) {
+            encoder->blockEncoder = blockEncoder;
+            stream_encoder_release(encoder);
+            return 0;
+        }
+    }
+    encoder->blockEncoder = blockEncoder;
+    return 1;
+}
+
+void stream_encoder_release(StreamEncoder* encoder) {
+    for (int c = 0; c < STREAM_MAX_CHANNELS; c++) {
+        if (encoder->blockContext[c]) encoder->blockEncoder->destroy(encoder->blockContext[c]);
+        encoder->blockContext[c] = NULL;
+    }
+    encoder->blockEncoder = NULL;
 }
 
 int stream_encode(StreamEncoder* encoder, const int16_t* frame, uint8_t* out) {
@@ -51,9 +77,16 @@ int stream_encode(StreamEncoder* encoder, const int16_t* frame, uint8_t* out) {
         for (int c = 0; c < format->channels; c++) encoder->block[c][encoder->count] = sample[c];
         if (++encoder->count < format->samplesPerBlock) return 0;
         encoder->count = 0;
-        for (int c = 0; c < format->channels; c++)
-            size += ima_adpcm_encode_block(&encoder->chains[c].adpcm, encoder->block[c], format->samplesPerBlock,
-                                           IMA_LAYOUT_WAV, out + size);
+        for (int c = 0; c < format->channels; c++) {
+            if (encoder->blockEncoder) {
+                encoder->blockEncoder->encode(encoder->blockContext[c], encoder->block[c], format->samplesPerBlock,
+                                              out + size);
+                size += IMA_ADPCM_BLOCK_BYTES(format->samplesPerBlock);
+            } else {
+                size += ima_adpcm_encode_block(&encoder->chains[c].adpcm, encoder->block[c], format->samplesPerBlock,
+                                               IMA_LAYOUT_WAV, out + size);
+            }
+        }
         return size;
     }
     return 0;

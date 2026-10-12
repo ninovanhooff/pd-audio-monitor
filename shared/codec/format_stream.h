@@ -18,13 +18,27 @@
 
 int stream_unit_bytes(const ChainFormat* format);
 
+// Encodes one channel's ADPCM blocks in place of the greedy IMA encoder. The host brings one (ADPCM-XQ) and the
+// device never links it. encode writes IMA_ADPCM_BLOCK_BYTES(count) bytes in the WAV layout.
+typedef struct {
+    void* (*create)(const ChainFormat* format);
+    void (*encode)(void* context, const int16_t* samples, int count, uint8_t* out);
+    void (*destroy)(void* context);
+} StreamBlockEncoder;
+
 typedef struct {
     FormatChain chains[STREAM_MAX_CHANNELS];
     int16_t block[STREAM_MAX_CHANNELS][STREAM_MAX_BLOCK_SAMPLES];
     int count;
+    const StreamBlockEncoder* blockEncoder;
+    void* blockContext[STREAM_MAX_CHANNELS];
 } StreamEncoder;
 
 void stream_encoder_init(StreamEncoder* encoder, const ChainFormat* format);
+// Switches an ADPCM format's blocks to another encoder, before the first frame; returns 0 for other formats or
+// when the encoder can't take them. stream_encoder_release frees what it made.
+int stream_encoder_use_block_encoder(StreamEncoder* encoder, const StreamBlockEncoder* blockEncoder);
+void stream_encoder_release(StreamEncoder* encoder);
 // Takes one frame (the format's channels): writes a unit to out (room for STREAM_MAX_UNIT_BYTES) when it
 // completes one; returns its size or 0.
 int stream_encode(StreamEncoder* encoder, const int16_t* frame, uint8_t* out);

@@ -1,17 +1,30 @@
 // ctypes entry points for pdstream.py, so the host encodes with the same code the chain tests cover.
 #include <stdlib.h>
 
+#include "adpcm_xq_encoder.h"
 #include "format_stream.h"
 
-StreamEncoder* pdstream_new(int format) {
+// adpcm_xq: encode ADPCM formats with ADPCM-XQ; other formats ignore it.
+StreamEncoder* pdstream_new(int format, int adpcm_xq) {
     if (format < 0 || format >= chain_format_count) return NULL;
     StreamEncoder* encoder = malloc(sizeof(StreamEncoder));
-    if (encoder) stream_encoder_init(encoder, &chain_formats[format]);
+    if (!encoder) return NULL;
+    stream_encoder_init(encoder, &chain_formats[format]);
+    if (adpcm_xq && chain_formats[format].codec == CODEC_ADPCM && !stream_encoder_use_block_encoder(encoder, &adpcm_xq_block_encoder)) {
+        free(encoder);
+        return NULL;
+    }
     return encoder;
 }
 
 void pdstream_free(StreamEncoder* encoder) {
+    if (!encoder) return;
+    stream_encoder_release(encoder);
     free(encoder);
+}
+
+int pdstream_is_adpcm(int format) {
+    return chain_formats[format].codec == CODEC_ADPCM;
 }
 
 // samples holds count interleaved frames of the format's channels; out needs room for

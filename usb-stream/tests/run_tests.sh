@@ -16,6 +16,11 @@ cc $flags -o "$build/receive_commands" "$here/receive_commands.c" "$here/../rece
 cc $flags -o "$build/meter_test" "$here/meter_test.c" -lm
 "$build/meter_test"
 cc $flags -o "$build/chain_render" "$codec/tests/chain_render.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" -lm
+# ADPCM-XQ is third-party code: built without -Werror.
+cc -std=c11 -O2 -Wall -Wextra -c -o "$build/adpcm-lib.o" "$codec/adpcm_xq/adpcm-lib.c"
+cc -std=c11 -O2 -Wall -Wextra -c -o "$build/adpcm-dns.o" "$codec/adpcm_xq/adpcm-dns.c"
+cc $flags -o "$build/stream_render" "$codec/tests/stream_render.c" "$codec/format_stream.c" "$codec/format_chain.c" \
+    "$codec/ima_adpcm.c" "$codec/adpcm_xq_encoder.c" "$build/adpcm-lib.o" "$build/adpcm-dns.o" -lm
 
 ffmpeg -v error -y -f lavfi -i "aevalsrc='0.4*sin(2*PI*(100+3000*t)*t)+0.1*(random(0)-0.5)':s=44100:d=3" \
     -ac 2 -c:a pcm_s16le "$build/input.wav"
@@ -58,6 +63,11 @@ def pdc_chunk(packet_text):
 def receive(commands):
     run = subprocess.run([f"{build}/receive_commands"], input=b"".join(commands), capture_output=True, check=True)
     return np.frombuffer(run.stdout, "<i2"), run.stderr.decode().strip()
+
+def render_xq(fmt, samples):
+    run = subprocess.run([f"{build}/stream_render", str(fmt), "xq"], input=samples.astype("<i2").tobytes(),
+                         capture_output=True, check=True)
+    return np.frombuffer(run.stdout, "<i2")
 
 def render(fmt, samples):
     run = subprocess.run([f"{build}/chain_render", str(fmt)], input=samples.astype("<i2").tobytes(),
@@ -104,6 +114,30 @@ for fmt, divisor in enumerate(divisors):
     tail = 20000 * channels
     ok = "lost 2" in counts and len(dropped) > tail and np.array_equal(dropped[-tail:], out[-tail:])
     check(f"{name}: recovers from 2 lost packets", ok, f"{counts}, {len(out) - len(dropped)} samples skipped")
+
+# --adpcm-xq: the host's ADPCM-XQ blocks reach the receiver as the stream encoder made them, and the greedy
+# encoder stays the default.
+for fmt in (2, 5, 8, 11, 14, 17):
+    path = f"{build}/format{fmt}_xq.bin"
+    subprocess.run([sys.executable, f"{here}/../host/pdstream.py", "--format", str(fmt), "--adpcm-xq",
+                    "--input", f"{build}/input.wav", "--out", path], check=True)
+    out, counts = receive(commands(open(path, "rb").read()))
+    channels = 1 if fmt < mono_formats else 2
+    ref = render_xq(fmt, mono if channels == 1 else interleaved)
+    n = min(len(out), len(ref))
+    greedy, _ = receive(commands(open(f"{build}/format{fmt}.bin", "rb").read()))
+    check(f"format {fmt}: --adpcm-xq audio equals stream_render's", n > 44100 * 2.9 * channels and
+          np.array_equal(out[:n], ref[:n]) and not np.array_equal(out[:n], greedy[:n]), f"{n} samples, {counts}")
+
+lib = pdstream.load_encoder()
+codec = pdstream.Codec(lib, 5)
+frames = stereo.astype(np.int16)[:4410]
+before = b"".join(codec.commands(frames, flush=True))
+codec.adpcm_xq = True
+after = b"".join(codec.commands(frames, flush=True))
+check("Codec: adpcm_xq switches the encoder on the next frames", codec.encoder.adpcm_xq and before != after, "")
+codec.switch(3)
+check("Codec: a format without ADPCM ignores adpcm_xq", codec.encoder.adpcm_xq and bool(codec.commands(frames, flush=True)), "")
 
 # The host's remembered settings round-trip, and a missing, corrupt or unwritable file is no error.
 with tempfile.TemporaryDirectory() as tmp:

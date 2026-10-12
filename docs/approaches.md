@@ -96,7 +96,9 @@ The speaker mixes both channels to mono (SDK 1.13), so stereo only matters on he
 - Playing a 22.05 kHz sample uses **linear interpolation** to 44.1 kHz, with no extra filtering
   (Simulator, −90 dB residual, *measured*; the device must match).
 - Encoders differ more than decoders. Greedy (Audacity, ffmpeg) vs look-ahead (`adpcm-xq`) is
-  audible, so the chain uses the greedy reference encoder, which matches `audioop` bit-for-bit.
+  audible, so the chain uses the greedy reference encoder, which matches `audioop` bit-for-bit. The usb-stream host
+  can encode with `adpcm-xq` instead (`shared/codec/adpcm_xq`, chosen as ADPCM-XQ in its window): its blocks
+  decode with the same shift-add rounding, and in the codec tests it quantizes 1 to 2 dB closer than greedy.
 
 ## Order of work
 
