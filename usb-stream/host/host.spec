@@ -9,7 +9,11 @@ name = "PD Audio Monitor Host"
 bundle_id = "nl.ninovanhooff.pdstream"
 here = SPECPATH
 library = "libpdstream.dll" if sys.platform == "win32" else "libpdstream.dylib"
-analysis = Analysis([os.path.join(here, "pdstream_gui.py")],
+# The receiver's pdxinfo is the one place the version is set.
+pdxinfo = os.path.join(here, "..", "receiver", "Source", "pdxinfo")
+with open(pdxinfo) as info:
+    version = next(line.split("=", 1)[1].strip() for line in info if line.startswith("version="))
+analysis = Analysis([os.path.join(here, "pdstream_gui.py")], datas=[(pdxinfo, ".")],
                     binaries=[(path, ".") for path in glob.glob(os.path.join(here, library))])
 if sys.platform == "win32":
     exe = EXE(PYZ(analysis.pure), analysis.scripts, analysis.binaries, analysis.datas, name=name, console=False)
@@ -20,7 +24,7 @@ else:
                  info_plist={
                      "CFBundleName": name,
                      "CFBundleDisplayName": name,
-                     "CFBundleShortVersionString": "1.1",
+                     "CFBundleShortVersionString": version,
                      "NSMicrophoneUsageDescription":
                          "PD Audio Monitor Host captures BlackHole, the virtual audio device your Mac plays into, "
                          "to stream it to the Playdate. macOS treats every audio input as a microphone.",

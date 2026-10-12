@@ -9,6 +9,9 @@
 // unit (bit 15 set: the stream restarts here), then data bytes of the format's stream
 // (format_stream.h). A serial `eval` carries it raw, as the string argument of pdstream_feed.
 // usb-stream/host/pdstream.py writes it; keep them in sync.
+// The receiver logs `pdstream hello <PACKET_PROTOCOL_VERSION>` about once a second; the host streams only
+// while it hears that, and PROTOCOL_VERSION in pdstream.py must match.
+#define PACKET_PROTOCOL_VERSION 2
 #define PACKET_HEADER_BYTES 4
 #define PACKET_RESTART 0x8000
 #define PACKET_OFFSET_MASK 0x7FFF

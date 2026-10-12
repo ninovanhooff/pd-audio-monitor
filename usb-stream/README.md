@@ -208,6 +208,17 @@ has to be sideloaded.
 | 2–3 | Offset of the first data byte within its unit (uint16 LE, bits 0–14); bit 15 is set on the first packet of a stream |
 | 4… | Stream bytes: 16-bit LE or 8-bit signed samples at the format's rate, or WAV-layout ADPCM blocks |
 
+Both show their version (`PD Audio Monitor Receiver v1.2` on the Playdate's screen, in the host's window title
+and log), so you can check they match; the host repeats it when it waits for a receiver. It is set once, in
+`receiver/Source/pdxinfo`.
+
+The receiver also logs `pdstream hello <protocol version>` about once a second. The host streams only
+to a receiver that has said hello or asked for a format in the last 3 seconds, and stops again when the
+Playdate's console complains (`Unknown command`, `Lua runtime is not available`), which is what it prints
+when the packets reach an app that isn't the receiver. The host's log then says so once instead of echoing
+every line, and its Playdate row asks you to start the receiver. A protocol mismatch between the two is
+reported when the hello arrives; the receiver also logs `pdstream format -1` when it quits.
+
 The other way, the receiver logs `pdstream format <n>` to its console, which goes out over USB, once
 a second until the stream arrives in that format. `pdstream.py` switches its encoder and keeps the
 sequence numbers running. When the Playdate's system menu opens, the receiver logs

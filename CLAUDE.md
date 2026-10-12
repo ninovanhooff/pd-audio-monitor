@@ -40,7 +40,10 @@ Device builds need `arm-none-eabi-gcc` (on Ubuntu: `gcc-arm-none-eabi libnewlib-
 - Button glyphs (Ⓐ Ⓑ ✛ ⬆ ➡ ⬇ ⬅ 🎣 ⊙ 🔒 🟨, drawn with `kUTF8Encoding`) are complete only in
   `Asheville-Sans-14-Light`. Asheville Bold has none of them, and the Roobert fonts lack most.
 - The packet layout and the `eval` bytecode template live in both `usb-stream/receiver/src/packet.{h,c}` and
-  `usb-stream/host/pdstream.py`.
+  `usb-stream/host/pdstream.py`; change one and bump `PACKET_PROTOCOL_VERSION` / `PROTOCOL_VERSION` with it.
+- The version is `version=` in `usb-stream/receiver/Source/pdxinfo`, nowhere else: the receiver's Makefile turns it
+  into `build/version.h` for the title text, and the host reads it (a copy is bundled) for its window title,
+  log and app bundle. Bump it with the release, and with any protocol change.
 - Settings are saved and restored across restarts: the receiver's `settings.bin` (`main.c`) and the host's
   `settings.json` (`pdstream.py`). Both start with a magic and a version and are ignored on a mismatch, so bump
   `SETTINGS_VERSION` whenever a file's format changes.
