@@ -4,6 +4,7 @@
 
 #include "meter.h"
 #include "packet.h"
+#include "version.h"
 #include "pd_api.h"
 
 static PlaydateAPI* pd;
@@ -61,6 +62,7 @@ static struct {
     int packetsPerSecond;
     int bytesPerSecond;
     unsigned int lastPacketMs;
+    unsigned int lastHelloMs;
 } ui;
 
 static void trackLevel(int16_t sample) {
@@ -286,6 +288,15 @@ static void resetDropoutsOnStart(void) {
     lastFormat = receiver.format;
 }
 
+// The host streams only to a receiver that has spoken: before this, it would feed packets to whatever
+// else is running on the Playdate.
+static void sayHello(void) {
+    unsigned int now = pd->system->getCurrentTimeMilliseconds();
+    if (ui.lastHelloMs && now - ui.lastHelloMs < 1000) return;
+    ui.lastHelloMs = now ? now : 1;
+    pd->system->logToConsole("pdstream hello %d", PACKET_PROTOCOL_VERSION);
+}
+
 static void updateRates(void) {
     unsigned int second = pd->system->getCurrentTimeMilliseconds() / 1000;
     if (second == ui.lastSecond) return;
@@ -454,13 +465,14 @@ static int update(void* userdata) {
     (void)userdata;
     feedReplay();
     handleInput();
+    sayHello();
     requestFormat();
     resetDropoutsOnStart();
     rememberFormat();
     updateRates();
 
     pd->graphics->clear(kColorWhite);
-    drawString(fonts.label, "PD Audio Monitor Receiver", 12, 8);
+    drawString(fonts.label, "PD Audio Monitor Receiver v" APP_VERSION, 12, 8);
     if (ui.wantedFormat >= 0 && ui.wantedFormat != receiver.format) {
         drawRow(40, "Format", "✛Ⓐ", "%s ...", chain_formats[ui.wantedFormat].deviceName);
     } else {
@@ -496,6 +508,10 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
         if (!pd) return 0;
         if (event == kEventPause) pauseStream();
         else resumeStream();
+        return 0;
+    }
+    if (event == kEventTerminate) {
+        if (pd) pd->system->logToConsole("pdstream format -1");
         return 0;
     }
     // Setting up at kEventInitLua, after the Lua runtime starts: a C update callback set at

@@ -20,7 +20,7 @@ bundle: dist/pdstream
 
 dist/pdstream: pdstream.py $(LIB)
 	$(PYTHON) -m PyInstaller --onefile --noconfirm --log-level WARN --name pdstream \
-		--specpath build --workpath build --distpath dist --add-binary $(abspath $(LIB)):. pdstream.py
+		--specpath build --workpath build --distpath dist --add-binary $(abspath $(LIB)):. --add-data $(abspath ../receiver/Source/pdxinfo):. pdstream.py
 
 # "PD Audio Monitor Host.app": the same in a window. macOS asks microphone access for the app itself.
 # Make can't name a file with spaces, so a stamp stands in for it, and a missing app forces a rebuild.

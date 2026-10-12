@@ -107,7 +107,8 @@ class App:
         self.restart = False
         self.settings = pdstream.load_settings()
 
-        root.title("PD Audio Monitor Host")
+        root.title(f"{pdstream.APP_NAME} v{pdstream.app_version()}")
+        self.console.log(f"{pdstream.APP_NAME} v{pdstream.app_version()}")
         root.geometry("760x600")
         root.minsize(560, 420)
         main = ttk.Frame(root, padding=12)
@@ -295,8 +296,12 @@ class App:
                 self.reopen.grid()
 
         port = self.sink.port if self.sink and self.running() else None
-        self.rows["Playdate"].configure(text=f"Connected on {port.port}" if port else "-" if not self.running() else
-                                        "Waiting: plug it in over USB, unlock it, and start PD Audio Monitor Receiver")
+        if port and not self.sink.listening() and self.sink.requested_format != -1:
+            playdate = f"Connected on {port.port}: start PD Audio Monitor Receiver on the Playdate"
+        else:
+            playdate = (f"Connected on {port.port}" if port else "-" if not self.running() else
+                        "Waiting: plug it in over USB, unlock it, and start PD Audio Monitor Receiver")
+        self.rows["Playdate"].configure(text=playdate)
         if self.codec and self.running() and self.format.current() != self.codec.format:
             self.format.current(self.codec.format)
             self.remember(format=self.codec.format)

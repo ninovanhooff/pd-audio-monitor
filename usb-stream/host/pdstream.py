@@ -28,6 +28,28 @@ PREFERRED_DEVICES = ("CABLE Output", "VoiceMeeter Output") if sys.platform == "w
 # The receiver logs this over USB when the user picks a format on the Playdate.
 # Format -1 asks the host to stop sending: the Playdate is paused, and the eval stream would swamp it.
 FORMAT_REQUEST = re.compile(rb"pdstream format (-?\d+)")
+# The receiver says this about once a second while it runs; the number is the protocol version
+# (PACKET_PROTOCOL_VERSION in usb-stream/receiver/src/packet.h).
+HELLO = re.compile(rb"pdstream hello (\d+)")
+PROTOCOL_VERSION = 2
+
+
+def app_version():
+    """The version in the receiver's pdxinfo, the one place it is set; bundled builds carry a copy."""
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    for path in (base / "pdxinfo", base.parent / "receiver" / "Source" / "pdxinfo"):
+        try:
+            for line in path.read_text().splitlines():
+                if line.startswith("version="):
+                    return line.split("=", 1)[1].strip()
+        except OSError:
+            pass
+    return "unknown"
+
+
+APP_NAME = "PD Audio Monitor Host"
+# What the Playdate's console answers when no receiver is running and it reads the packets as commands.
+CONSOLE_NOISE = re.compile(rb"Unknown command|full list of commands|Lua runtime is not available")
 # Packet layout is in usb-stream/receiver/src/packet.h.
 HEADER_BYTES = 4
 PACKET_BYTES = 1024
@@ -223,6 +245,44 @@ def playdate_ports():
     return ports
 
 
+class ReceiverWatch:
+    """Whether the receiver app is answering on the other end of the link. The host only streams to one
+    that has spoken (a hello or a format request) in the last few seconds, and not since the Playdate's
+    console last complained about packets it couldn't run."""
+
+    TIMEOUT = 3.0
+
+    def __init__(self, clock=time.monotonic):
+        self.clock = clock
+        self.reset()
+
+    def reset(self):
+        self.heard_at = self.noise_at = None
+        self.version = None
+
+    def hear(self, line):
+        """Takes a line the Playdate printed; returns "hello", "format", "noise" or None."""
+        now = self.clock()
+        match = HELLO.search(line)
+        if match:
+            self.version = int(match.group(1))
+            self.heard_at, self.noise_at = now, None
+            return "hello"
+        if FORMAT_REQUEST.search(line):
+            self.heard_at, self.noise_at = now, None
+            return "format"
+        if CONSOLE_NOISE.search(line):
+            self.noise_at = now
+            return "noise"
+        return None
+
+    def noisy(self):
+        return self.noise_at is not None
+
+    def listening(self):
+        return not self.noisy() and self.heard_at is not None and self.clock() - self.heard_at < self.TIMEOUT
+
+
 class SerialSink:
     """Drops audio while the Playdate is unplugged or locked, and opens the port when it's there."""
 
@@ -233,6 +293,9 @@ class SerialSink:
         self.requested = port
         self.verbose = verbose
         self.requested_format = None
+        self.watch = ReceiverWatch()
+        self.noise_logged = False
+        self.poll_at = 0
         self.port = None
         self.retry_at = 0
         if not self._reconnect():
@@ -254,9 +317,22 @@ class SerialSink:
                 time.sleep(0.05)
                 continue
             for line in complete:
-                # Each eval answers with an empty line.
-                if self.verbose and line.strip():
+                kind = self.watch.hear(line)
+                # Each eval answers with an empty line; the receiver's hellos and the console's complaints
+                # about packets it can't run are summarised instead.
+                if self.verbose and line.strip() and kind in (None, "format") and not self.watch.noisy():
                     console.log(line.decode(errors="replace").rstrip())
+                if kind == "hello":
+                    self.noise_logged = False
+                    if self.watch.version != PROTOCOL_VERSION:
+                        console.log(f"The receiver speaks protocol {self.watch.version}, this host {PROTOCOL_VERSION}: "
+                                    "update the older one.")
+                    # A pause from before the receiver was last started has no say any more.
+                    if self.requested_format == -1:
+                        self.requested_format = None
+                elif kind == "noise" and not self.noise_logged:
+                    self.noise_logged = True
+                    console.log("The Playdate isn't running PD Audio Monitor Receiver: not sending until it is.")
                 match = FORMAT_REQUEST.search(line)
                 if match:
                     self.requested_format = int(match.group(1))
@@ -286,12 +362,23 @@ class SerialSink:
             port, self.port = self.port, None
             # A request from before the Playdate went has no say over what it gets when it returns.
             self.requested_format = None
+            self.watch.reset()
             try:
                 port.close()
             except (self.serial.SerialException, OSError):
                 pass
             console.log("Playdate gone (unplugged or locked); waiting for it to come back")
             return False
+
+    def listening(self):
+        return self.port is not None and self.watch.listening()
+
+    def poll(self):
+        """An empty line, once a second: how a Playdate that has gone is noticed while nothing is sent."""
+        now = time.monotonic()
+        if now >= self.poll_at:
+            self.poll_at = now + 1
+            self.write([b"\n"])
 
     def close(self):
         if self.port is not None:
@@ -304,6 +391,12 @@ class SerialSink:
 
 class FileSink:
     requested_format = None
+
+    def listening(self):
+        return True
+
+    def poll(self):
+        pass
 
     def __init__(self, path):
         self.file = open(path, "wb")
@@ -341,8 +434,13 @@ def follow_playdate(codec, sink, stats, names):
         if not codec.paused:
             codec.paused = True
             console.log("Playdate paused: not sending until it asks for a format")
-        # Nothing else is written while paused, so this is how a Playdate that has gone is noticed.
-        sink.write([b"\n"])
+        sink.poll()
+    elif not sink.listening():
+        if not codec.paused:
+            codec.paused = True
+            console.log("Waiting for PD Audio Monitor Receiver on the Playdate: not sending until it answers. "
+                        f"Make sure the receiver is version {app_version()}")
+        sink.poll()
     elif fmt is None:
         codec.paused = False
     elif fmt is not None and 0 <= fmt < len(names) and (fmt != codec.format or codec.paused):
@@ -528,6 +626,7 @@ def main():
     parser.add_argument("--out", type=Path, help="write what would go to the Playdate to a file")
     parser.add_argument("--verbose", action="store_true", help="show what the Playdate prints")
     args = parser.parse_args()
+    console.log(f"{APP_NAME} v{app_version()}")
     if not 0 <= args.format < len(formats):
         parser.error(f"--format must be 0 to {len(formats) - 1}")
 

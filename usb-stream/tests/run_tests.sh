@@ -134,10 +134,53 @@ with tempfile.TemporaryDirectory() as tmp:
         saved = False
     check("settings: an unwritable folder is ignored", saved, "")
 
+info = (Path(pdstream.__file__).parent.parent / "receiver/Source/pdxinfo").read_text()
+check("version: the host reads the receiver's pdxinfo", f"\nversion={pdstream.app_version()}\n" in "\n" + info and re.fullmatch(r"\d+\.\d+", pdstream.app_version()), pdstream.app_version())
+
+# The host streams only to a receiver that has spoken recently, and stops when the console complains.
+now = [0.0]
+watch = pdstream.ReceiverWatch(lambda: now[0])
+check("watch: silent until the receiver speaks", not watch.listening(), "")
+check("watch: a hello is heard", watch.hear(b"pdstream hello 2") == "hello" and watch.listening()
+      and watch.version == 2, "")
+now[0] = 2.9
+check("watch: still listening within the timeout", watch.listening(), "")
+now[0] = 3.1
+check("watch: not listening after the timeout", not watch.listening(), "")
+check("watch: a format request is a sign of life", watch.hear(b"pdstream format 5") == "format" and watch.listening(), "")
+for noise in (b'Unknown command 0$B!b#2sC2:CPB3 (try help for a full list of commands)', b"Lua runtime is not available",
+              b"help for a full list of commands)"):
+    watch.hear(b"pdstream hello 2")
+    check(f"watch: {noise[:30]!r} stops the stream", watch.hear(noise) == "noise" and not watch.listening(), "")
+check("watch: a hello after the noise resumes it", watch.hear(b"pdstream hello 2") == "hello" and watch.listening(), "")
+check("watch: other lines are ignored", watch.hear(b"some log line") is None and watch.listening(), "")
+watch.reset()
+check("watch: reset forgets the receiver", not watch.listening() and watch.version is None, "")
+
+class FakeSink:
+    def __init__(self):
+        self.requested_format, self.heard, self.polls = None, False, 0
+
+    def listening(self):
+        return self.heard
+
+    def poll(self):
+        self.polls += 1
+
+lib = pdstream.load_encoder()
+codec, sink = pdstream.Codec(lib, 5), FakeSink()
+lines = []
+pdstream.console = type("Lines", (), {"log": staticmethod(lines.append)})()
+check("follow_playdate: waits for a receiver", pdstream.follow_playdate(codec, sink, None, []) and sink.polls == 1, "")
+check("follow_playdate: says which receiver version to run", f"version {pdstream.app_version()}" in lines[-1], lines[-1])
+sink.heard = True
+check("follow_playdate: streams once it has spoken", not pdstream.follow_playdate(codec, sink, None, []), "")
+sink.requested_format = -1
+check("follow_playdate: a pause stops it", pdstream.follow_playdate(codec, sink, None, []), "")
+
 # A stream that restarts without a gap in the sequence (the host resumes after the Playdate's menu
 # closes) starts at a unit boundary while the receiver may be partway through a unit. The restart must
 # realign the decoder, with nothing counted as lost.
-lib = pdstream.load_encoder()
 frames = stereo.astype(np.int16)
 for fmt in range(len(divisors)):
     channels = 1 if fmt < mono_formats else 2
