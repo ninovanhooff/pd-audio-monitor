@@ -32,6 +32,15 @@ Device builds need `arm-none-eabi-gcc` (on Ubuntu: `gcc-arm-none-eabi libnewlib-
 - usb-stream tests must be deterministic. A flaky usb-stream test is not allowed: fix it or remove it
   before merging; never skip or retry around it.
 
+## Branches and worktrees
+
+Name a branch or worktree after the change, not the session: lowercase, hyphenated, a short prefix for the
+kind (`feat/`, `fix/`, `docs/`, `test/`), and the component or subject, e.g. `feat/qoa-codec`,
+`fix/receiver-prefill-underrun`. Keep it under about 40 characters, with no random suffixes or dates, and
+give a worktree the branch's name with `/` as `-` (`../pd-audio-monitor-feat-qoa-codec`). Rename a
+branch that was given a generated name before opening a PR from it. Where the environment dictates a
+branch name, use that one.
+
 ## Gotchas
 
 - No `snprintf`/stdio in device code: newlib's stdio pulls in syscalls the device doesn't provide
