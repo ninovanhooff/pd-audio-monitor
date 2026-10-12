@@ -6,9 +6,12 @@
 #include "format_stream.h"
 
 // A packet is: format index, sequence number, uint16 LE offset of the first data byte within its
-// unit, then data bytes of the format's stream (format_stream.h). A serial `eval` carries it raw, as
-// the string argument of pdstream_feed. usb-stream/host/pdstream.py writes it; keep them in sync.
+// unit (bit 15 set: the stream restarts here), then data bytes of the format's stream
+// (format_stream.h). A serial `eval` carries it raw, as the string argument of pdstream_feed.
+// usb-stream/host/pdstream.py writes it; keep them in sync.
 #define PACKET_HEADER_BYTES 4
+#define PACKET_RESTART 0x8000
+#define PACKET_OFFSET_MASK 0x7FFF
 
 typedef void (*PacketEmit)(void* context, const int16_t* frames, int count, int channels);
 

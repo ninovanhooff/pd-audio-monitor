@@ -25,6 +25,13 @@ scripts/quickinstall.sh -i line-in-monitor   # macOS: build, copy to a USB-conne
 
 Device builds need `arm-none-eabi-gcc` (on Ubuntu: `gcc-arm-none-eabi libnewlib-arm-none-eabi`).
 
+## Tests
+
+- `line-in-monitor/tests/sim_e2e.sh` is flaky and disabled: it exits early unless `RUN_FLAKY=1`. Don't
+  re-enable it, and disable any other line-in-monitor test that turns out flaky.
+- usb-stream tests must be deterministic. A flaky usb-stream test is not allowed: fix it or remove it
+  before merging; never skip or retry around it.
+
 ## Gotchas
 
 - No `snprintf`/stdio in device code: newlib's stdio pulls in syscalls the device doesn't provide
@@ -34,6 +41,9 @@ Device builds need `arm-none-eabi-gcc` (on Ubuntu: `gcc-arm-none-eabi libnewlib-
   `Asheville-Sans-14-Light`. Asheville Bold has none of them, and the Roobert fonts lack most.
 - The packet layout and the `eval` bytecode template live in both `usb-stream/receiver/src/packet.{h,c}` and
   `usb-stream/host/pdstream.py`.
+- Settings are saved and restored across restarts: the receiver's `settings.bin` (`main.c`) and the host's
+  `settings.json` (`pdstream.py`). Both start with a magic and a version and are ignored on a mismatch, so bump
+  `SETTINGS_VERSION` whenever a file's format changes.
 - `requestMicAccess` (SDK 3.1) must be called before `setMicCallback`.
 - Simulator first run shows dialogs and the mic prompt; `sim_e2e.sh` seeds
   `Disk/Data/<bundleID>/Permissions` and the Simulator ini to skip them.

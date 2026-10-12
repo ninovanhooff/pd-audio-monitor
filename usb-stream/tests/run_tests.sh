@@ -2,6 +2,7 @@
 # Host checks: pdstream.py's eval commands, decoded by the receiver's own packet code, must equal
 # chain_render's output for every format, and the receiver must recover from lost packets. With pdc
 # on the PATH, the eval bytecode must equal pdc's.
+# The receiver's buffer and meter arithmetic (meter.h) is checked first.
 # Needs: cc, ffmpeg, python3 with numpy.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -12,6 +13,8 @@ flags="-std=c11 -O2 -Wall -Wextra -Werror -I$codec -I$here/../receiver/src"
 make -s -C "$here/../host"
 cc $flags -o "$build/receive_commands" "$here/receive_commands.c" "$here/../receiver/src/packet.c" \
     "$codec/format_stream.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" -lm
+cc $flags -o "$build/meter_test" "$here/meter_test.c" -lm
+"$build/meter_test"
 cc $flags -o "$build/chain_render" "$codec/tests/chain_render.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" -lm
 
 ffmpeg -v error -y -f lavfi -i "aevalsrc='0.4*sin(2*PI*(100+3000*t)*t)+0.1*(random(0)-0.5)':s=44100:d=3" \
@@ -101,5 +104,45 @@ for fmt, divisor in enumerate(divisors):
     tail = 20000 * channels
     ok = "lost 2" in counts and len(dropped) > tail and np.array_equal(dropped[-tail:], out[-tail:])
     check(f"{name}: recovers from 2 lost packets", ok, f"{counts}, {len(out) - len(dropped)} samples skipped")
+
+# The host's remembered settings round-trip, and a missing, corrupt or unwritable file is no error.
+with tempfile.TemporaryDirectory() as tmp:
+    path = Path(tmp, "nested", "settings.json")
+    check("settings: a missing file is empty", pdstream.load_settings(path) == {}, "")
+    pdstream.save_settings({"device": "BlackHole 2ch", "format": 5}, path)
+    check("settings: saved values come back", pdstream.load_settings(path) == {"device": "BlackHole 2ch", "format": 5}, "")
+    path.write_text("{not json")
+    check("settings: a corrupt file is empty", pdstream.load_settings(path) == {}, "")
+    path.write_text("[1, 2]")
+    check("settings: a non-object file is empty", pdstream.load_settings(path) == {}, "")
+    path.write_text('{"magic": "pdstream-settings", "version": 0, "format": 3}')
+    check("settings: another version isn't loaded", pdstream.load_settings(path) == {}, "")
+    path.write_text('{"version": 1, "format": 3}')
+    check("settings: a file without the magic isn't loaded", pdstream.load_settings(path) == {}, "")
+    blocker = Path(tmp, "file")
+    blocker.write_text("")
+    try:
+        pdstream.save_settings({"format": 1}, blocker / "settings.json")
+        saved = True
+    except OSError:
+        saved = False
+    check("settings: an unwritable folder is ignored", saved, "")
+
+# A stream that restarts without a gap in the sequence (the host resumes after the Playdate's menu
+# closes) starts at a unit boundary while the receiver may be partway through a unit. The restart must
+# realign the decoder, with nothing counted as lost.
+lib = pdstream.load_encoder()
+frames = stereo.astype(np.int16)
+for fmt in range(len(divisors)):
+    channels = 1 if fmt < mono_formats else 2
+    codec = pdstream.Codec(lib, fmt)
+    first = b"".join(codec.commands(frames[:44100]))
+    codec.switch(fmt)
+    second = b"".join(codec.commands(frames[44100:88200]))
+    alone, _ = receive(commands(second))
+    both, counts = receive(commands(first) + commands(second))
+    tail = 20000 * channels
+    ok = "lost 0" in counts and len(alone) > tail and np.array_equal(both[-tail:], alone[-tail:])
+    check(f"format {fmt}: a restarted stream realigns the decoder", ok, counts)
 sys.exit(1 if failed else 0)
 PY

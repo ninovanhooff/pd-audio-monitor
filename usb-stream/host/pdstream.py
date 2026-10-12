@@ -7,6 +7,8 @@ decodes it and plays it on the speaker.
 """
 import argparse
 import ctypes
+import json
+import os
 import queue
 import re
 import sys
@@ -29,6 +31,8 @@ FORMAT_REQUEST = re.compile(rb"pdstream format (-?\d+)")
 # Packet layout is in usb-stream/receiver/src/packet.h.
 HEADER_BYTES = 4
 PACKET_BYTES = 1024
+# Set in the offset field of a stream's first packet: the receiver drops a partly received unit.
+RESTART_FLAG = 0x8000
 # pdc's compilation of `pdstream_feed("...")`: Playdate's Lua 5.4 with 4-byte integers and floats,
 # stripped. The string constant comes last, so the chunk can be built around any packet.
 EVAL_HEAD = bytes.fromhex("1b4c7561540019930d0a1a0a040404785600000040b9430180808000010285"
@@ -51,6 +55,41 @@ def eval_command(packet):
     tag = 0x04 if len(packet) <= LUA_MAX_SHORT_STRING else 0x14
     chunk = EVAL_HEAD + bytes([tag]) + lua_size(len(packet) + 1) + packet + EVAL_TAIL
     return b"eval %d\n" % len(chunk) + chunk
+
+
+def settings_path():
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA") or Path.home())
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    return base / "PD Audio Monitor Host" / "settings.json"
+
+
+SETTINGS_MAGIC = "pdstream-settings"
+SETTINGS_VERSION = 1
+
+
+def load_settings(path=None):
+    """The remembered input and format; empty if the file is missing, unreadable or not this version."""
+    try:
+        values = json.loads((path or settings_path()).read_text())
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(values, dict) or values.get("magic") != SETTINGS_MAGIC or values.get("version") != SETTINGS_VERSION:
+        return {}
+    return {key: value for key, value in values.items() if key not in ("magic", "version")}
+
+
+def save_settings(values, path=None):
+    """Settings are a convenience: a folder that can't be written to must not stop the stream."""
+    path = path or settings_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"magic": SETTINGS_MAGIC, "version": SETTINGS_VERSION, **values}, indent=2))
+    except OSError:
+        pass
 
 
 def load_encoder():
@@ -96,6 +135,7 @@ class Packetizer:
         self.pending = bytearray()
         self.position = 0
         self.sequence = 0
+        self.restart = True
 
     def commands(self, data, flush=False):
         self.pending += data
@@ -105,6 +145,9 @@ class Packetizer:
             chunk = bytes(self.pending[:payload])
             del self.pending[:payload]
             offset = self.position % self.unit_bytes
+            if self.restart:
+                offset |= RESTART_FLAG
+                self.restart = False
             header = bytes([self.fmt, self.sequence, offset & 0xFF, offset >> 8])
             out.append(eval_command(header + chunk))
             self.position += len(chunk)

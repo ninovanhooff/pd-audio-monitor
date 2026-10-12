@@ -12,15 +12,17 @@ int packet_receive(PacketReceiver* receiver, const uint8_t* packet, int length, 
 
     const ChainFormat* format = &chain_formats[packet[0]];
     const int unit = stream_unit_bytes(format);
-    const int offset = packet[2] | packet[3] << 8;
+    const int field = packet[2] | packet[3] << 8;
+    const int offset = field & PACKET_OFFSET_MASK;
+    const int restart = (field & PACKET_RESTART) != 0;
     if (offset >= unit) return 0;
 
     if (packet[0] != receiver->format) {
         receiver->format = packet[0];
         stream_decoder_init(&receiver->decoder, format);
         receiver->skip = (unit - offset) % unit;
-    } else if (packet[1] != receiver->nextSequence) {
-        receiver->lost += (uint8_t)(packet[1] - receiver->nextSequence);
+    } else if (restart || packet[1] != receiver->nextSequence) {
+        if (!restart) receiver->lost += (uint8_t)(packet[1] - receiver->nextSequence);
         stream_decoder_resync(&receiver->decoder);
         receiver->skip = (unit - offset) % unit;
     }

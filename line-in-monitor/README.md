@@ -53,7 +53,7 @@ first launch.
 ## Test
 
 - `../shared/codec/tests/run_tests.sh`: codec and chain on the host.
-- `tests/sim_e2e.sh` (headless Linux): feeds a sweep into the Simulator's mic through PulseAudio,
+- `tests/sim_e2e.sh` (headless Linux; flaky, so disabled unless `RUN_FLAKY=1`): feeds a sweep into the Simulator's mic through PulseAudio,
   records the output, and checks it against `chain_render` (residual must be below −60 dB; it
   measures about −83 dB).
 
