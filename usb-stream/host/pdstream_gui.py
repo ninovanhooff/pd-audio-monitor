@@ -105,6 +105,7 @@ class App:
         self.formats = [self.lib.pdstream_format_name(i).decode() for i in range(self.lib.pdstream_format_count())]
         self.worker = self.stop = self.sink = self.codec = None
         self.restart = False
+        self.settings = pdstream.load_settings()
 
         root.title("PD Audio Monitor Host")
         root.geometry("760x600")
@@ -135,11 +136,13 @@ class App:
         ttk.Label(controls, text="Input").pack(side="left")
         self.device = ttk.Combobox(controls, state="readonly", width=24)
         self.device.pack(side="left", padx=(4, 12))
-        self.device.bind("<<ComboboxSelected>>", lambda event: self.restart_stream())
+        self.device.bind("<<ComboboxSelected>>", lambda event: (self.remember(device=self.device.get()), self.restart_stream()))
         ttk.Label(controls, text="Format").pack(side="left")
         self.format = ttk.Combobox(controls, state="readonly", width=30,
                                    values=[f"{i}  {name}" for i, name in enumerate(self.formats)])
-        self.format.current(self.lib.pdstream_default_format())
+        saved = self.settings.get("format")
+        self.format.current(saved if isinstance(saved, int) and 0 <= saved < len(self.formats)
+                            else self.lib.pdstream_default_format())
         self.format.pack(side="left", padx=(4, 12))
         self.format.bind("<<ComboboxSelected>>", lambda event: self.pick_format())
         self.toggle = ttk.Button(controls, text="Stop", command=self.toggle_stream)
@@ -173,14 +176,31 @@ class App:
         return frame
 
     def list_devices(self):
-        names = [d["name"] for d in pdstream.input_devices()]
-        current = self.device.get()
+        try:
+            names = [d["name"] for d in pdstream.input_devices()]
+        except Exception as error:  # PortAudio can fail to list devices; the window must still open.
+            names = []
+            self.write_log(f"Couldn't list the input devices: {error}")
         self.device["values"] = names
-        if current not in names:
+        if self.device.get() in names:
+            return
+        saved = self.settings.get("device")
+        if saved in names:
+            self.device.set(saved)
+            return
+        try:
             virtual = pdstream.preferred_input()
-            self.device.set(virtual["name"] if virtual else names[0] if names else "")
-            if not virtual:
-                self.write_log(f"{pdstream.PREFERRED_DEVICES[0]} not found: see Setup, then press ↻ and pick it under Input.")
+        except Exception:
+            virtual = None
+        self.device.set(virtual["name"] if virtual else names[0] if names else "")
+        if saved:
+            self.write_log(f"Input {saved!r} not found: using {self.device.get() or 'no input'}. Pick another under Input, then press ↻.")
+        elif not virtual:
+            self.write_log(f"{pdstream.PREFERRED_DEVICES[0]} not found: see Setup, then press ↻ and pick it under Input.")
+
+    def remember(self, **values):
+        self.settings.update(values)
+        pdstream.save_settings(self.settings)
 
     def write_log(self, text):
         self.log.configure(state="normal")
@@ -241,6 +261,7 @@ class App:
         self.root.destroy()
 
     def pick_format(self):
+        self.remember(format=self.format.current())
         if self.running():
             self.sink.requested_format = self.format.current()  # as if the Playdate asked: the stream thread switches
 
@@ -278,6 +299,7 @@ class App:
                                         "Waiting: plug it in over USB, unlock it, and start PD Audio Monitor Receiver")
         if self.codec and self.running() and self.format.current() != self.codec.format:
             self.format.current(self.codec.format)
+            self.remember(format=self.codec.format)
         self.root.after(250, self.poll)
 
 

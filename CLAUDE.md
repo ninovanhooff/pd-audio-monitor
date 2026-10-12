@@ -41,6 +41,9 @@ Device builds need `arm-none-eabi-gcc` (on Ubuntu: `gcc-arm-none-eabi libnewlib-
   `Asheville-Sans-14-Light`. Asheville Bold has none of them, and the Roobert fonts lack most.
 - The packet layout and the `eval` bytecode template live in both `usb-stream/receiver/src/packet.{h,c}` and
   `usb-stream/host/pdstream.py`.
+- Settings are saved and restored across restarts: the receiver's `settings.bin` (`main.c`) and the host's
+  `settings.json` (`pdstream.py`). Both start with a magic and a version and are ignored on a mismatch, so bump
+  `SETTINGS_VERSION` whenever a file's format changes.
 - `requestMicAccess` (SDK 3.1) must be called before `setMicCallback`.
 - Simulator first run shows dialogs and the mic prompt; `sim_e2e.sh` seeds
   `Disk/Data/<bundleID>/Permissions` and the Simulator ini to skip them.

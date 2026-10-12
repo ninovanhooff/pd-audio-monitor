@@ -73,6 +73,14 @@ If the serial port is busy, quit the Playdate Simulator and Mirror; they also ta
 
 While no stream arrives, the bottom of the screen tells how to connect the computer.
 
+Both ends remember their settings across restarts. The receiver keeps the format and the pre-fill
+in `settings.bin` in its data folder, and asks the host for that format when it starts. The host app
+keeps its Input and Format in `settings.json` (macOS `~/Library/Application Support/PD Audio Monitor Host`,
+Windows `%APPDATA%\PD Audio Monitor Host`, Linux `~/.config/PD Audio Monitor Host`). If the remembered
+input isn't there, for example the cable was unplugged, the host says so in the log and falls back to the
+default input; the choice comes back once the input does. Both files start with a magic and a version
+number; a file that doesn't match is ignored, not loaded, and replaced on the next save.
+
 ## Formats and link load
 
 | # | Host | Playdate | `eval`/s | KB/s on the wire |

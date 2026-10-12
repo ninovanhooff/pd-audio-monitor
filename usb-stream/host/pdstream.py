@@ -7,6 +7,8 @@ decodes it and plays it on the speaker.
 """
 import argparse
 import ctypes
+import json
+import os
 import queue
 import re
 import sys
@@ -53,6 +55,41 @@ def eval_command(packet):
     tag = 0x04 if len(packet) <= LUA_MAX_SHORT_STRING else 0x14
     chunk = EVAL_HEAD + bytes([tag]) + lua_size(len(packet) + 1) + packet + EVAL_TAIL
     return b"eval %d\n" % len(chunk) + chunk
+
+
+def settings_path():
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA") or Path.home())
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    return base / "PD Audio Monitor Host" / "settings.json"
+
+
+SETTINGS_MAGIC = "pdstream-settings"
+SETTINGS_VERSION = 1
+
+
+def load_settings(path=None):
+    """The remembered input and format; empty if the file is missing, unreadable or not this version."""
+    try:
+        values = json.loads((path or settings_path()).read_text())
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(values, dict) or values.get("magic") != SETTINGS_MAGIC or values.get("version") != SETTINGS_VERSION:
+        return {}
+    return {key: value for key, value in values.items() if key not in ("magic", "version")}
+
+
+def save_settings(values, path=None):
+    """Settings are a convenience: a folder that can't be written to must not stop the stream."""
+    path = path or settings_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"magic": SETTINGS_MAGIC, "version": SETTINGS_VERSION, **values}, indent=2))
+    except OSError:
+        pass
 
 
 def load_encoder():
