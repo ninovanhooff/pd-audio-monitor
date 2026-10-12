@@ -105,6 +105,29 @@ for fmt, divisor in enumerate(divisors):
     ok = "lost 2" in counts and len(dropped) > tail and np.array_equal(dropped[-tail:], out[-tail:])
     check(f"{name}: recovers from 2 lost packets", ok, f"{counts}, {len(out) - len(dropped)} samples skipped")
 
+# The host's remembered settings round-trip, and a missing, corrupt or unwritable file is no error.
+with tempfile.TemporaryDirectory() as tmp:
+    path = Path(tmp, "nested", "settings.json")
+    check("settings: a missing file is empty", pdstream.load_settings(path) == {}, "")
+    pdstream.save_settings({"device": "BlackHole 2ch", "format": 5}, path)
+    check("settings: saved values come back", pdstream.load_settings(path) == {"device": "BlackHole 2ch", "format": 5}, "")
+    path.write_text("{not json")
+    check("settings: a corrupt file is empty", pdstream.load_settings(path) == {}, "")
+    path.write_text("[1, 2]")
+    check("settings: a non-object file is empty", pdstream.load_settings(path) == {}, "")
+    path.write_text('{"magic": "pdstream-settings", "version": 0, "format": 3}')
+    check("settings: another version isn't loaded", pdstream.load_settings(path) == {}, "")
+    path.write_text('{"version": 1, "format": 3}')
+    check("settings: a file without the magic isn't loaded", pdstream.load_settings(path) == {}, "")
+    blocker = Path(tmp, "file")
+    blocker.write_text("")
+    try:
+        pdstream.save_settings({"format": 1}, blocker / "settings.json")
+        saved = True
+    except OSError:
+        saved = False
+    check("settings: an unwritable folder is ignored", saved, "")
+
 # A stream that restarts without a gap in the sequence (the host resumes after the Playdate's menu
 # closes) starts at a unit boundary while the receiver may be partway through a unit. The restart must
 # realign the decoder, with nothing counted as lost.

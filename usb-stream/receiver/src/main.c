@@ -360,9 +360,57 @@ static void drawMeter(int y) {
     }
 }
 
+// What survives a restart, in the app's data folder: a magic and a version byte, then the format and
+// the pre-fill option. A file of another version is ignored.
+#define SETTINGS_FILE "settings.bin"
+#define SETTINGS_MAGIC 0x5D
+#define SETTINGS_VERSION 1
+static int savedFormat = -1;
+static int savedPrefill = PREFILL_DEFAULT_OPTION;
+
+static void loadSettings(void) {
+    SDFile* file = pd->file->open(SETTINGS_FILE, kFileReadData);
+    if (!file) return;
+    uint8_t bytes[4];
+    if (pd->file->read(file, bytes, sizeof(bytes)) == (int)sizeof(bytes) && bytes[0] == SETTINGS_MAGIC &&
+        bytes[1] == SETTINGS_VERSION) {
+        if (bytes[2] < chain_format_count) savedFormat = bytes[2];
+        if (bytes[3] < PREFILL_OPTIONS) savedPrefill = bytes[3];
+    }
+    pd->file->close(file);
+}
+
+static void saveSettings(void) {
+    SDFile* file = pd->file->open(SETTINGS_FILE, kFileWrite);
+    if (!file) return;
+    uint8_t bytes[4] = {SETTINGS_MAGIC, SETTINGS_VERSION, (uint8_t)savedFormat, (uint8_t)savedPrefill};
+    pd->file->write(file, bytes, sizeof(bytes));
+    pd->file->close(file);
+}
+
+// A stream's format is kept once it has held for a while, not while a switch is still settling.
+static void rememberFormat(void) {
+    static int candidate = -1;
+    static unsigned int sinceMs;
+    unsigned int now = pd->system->getCurrentTimeMilliseconds();
+    int format = isReceiving() ? receiver.format : -1;
+    if (format != candidate) {
+        candidate = format;
+        sinceMs = now;
+    } else if (format >= 0 && format != savedFormat && now - sinceMs > 3000) {
+        savedFormat = format;
+        saveSettings();
+    }
+}
+
 static void prefillChanged(void* userdata) {
     (void)userdata;
-    primeFill = prefill_samples(pd->system->getMenuItemValue(prefillItem));
+    int option = pd->system->getMenuItemValue(prefillItem);
+    primeFill = prefill_samples(option);
+    if (option != savedPrefill) {
+        savedPrefill = option;
+        saveSettings();
+    }
 }
 
 static void startSource(void) {
@@ -396,6 +444,7 @@ static int update(void* userdata) {
     handleInput();
     requestFormat();
     resetDropoutsOnStart();
+    rememberFormat();
     updateRates();
 
     pd->graphics->clear(kColorWhite);
@@ -409,7 +458,7 @@ static int update(void* userdata) {
     int kbTenths = ui.bytesPerSecond / 100;
     drawRow(88, "Link", "", "%d eval/s, %d.%d KB/s", ui.packetsPerSecond, kbTenths / 10, kbTenths % 10);
     drawRow(112, "Buffer", "", "%d ms", ui.shownBufferMs);
-    drawMeter(136);
+    drawMeter(148);
     if (isReceiving()) {
         drawRow(214, "Dropouts", "", "%d lost, %d under, %d over", (int)receiver.lost, (int)underruns, (int)overruns);
     } else {
@@ -464,7 +513,9 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
         "140 ms", "150 ms", "160 ms", "170 ms", "180 ms", "190 ms", "200 ms", "210 ms", "220 ms",
         "230 ms", "240 ms", "250 ms", "260 ms", "270 ms", "280 ms", "290 ms", "300 ms"};
     prefillItem = pd->system->addOptionsMenuItem("Pre-fill", prefillTitles, PREFILL_OPTIONS, prefillChanged, NULL);
-    pd->system->setMenuItemValue(prefillItem, PREFILL_DEFAULT_OPTION);
+    loadSettings();
+    pd->system->setMenuItemValue(prefillItem, savedPrefill);
+    ui.wantedFormat = savedFormat;
     prefillChanged(NULL);
 
     pd->system->setAutoLockDisabled(1);
