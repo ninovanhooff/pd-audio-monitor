@@ -12,6 +12,7 @@ work="${TMPDIR:-/tmp}/usb-stream-e2e"
 data="$sdk/Disk/Data/nl.ninovanhooff.usbstream"
 seconds=10
 mkdir -p "$work" "$data" "$HOME/.config/Playdate Simulator"
+rm -f "$data/settings.bin"
 
 make -s -C "$here/../host"
 codec="$here/../../shared/codec"

@@ -2,6 +2,7 @@
 #include <stdarg.h>
 #include <string.h>
 
+#include "meter.h"
 #include "packet.h"
 #include "pd_api.h"
 
@@ -11,15 +12,12 @@ static struct {
     LCDFont* label;
     LCDFont* value;
     LCDFont* glyph;
+    LCDFont* tiny;
 } fonts;
 
 // Single producer (pdstream_feed, on the main thread), single consumer (source callback): only the
 // producer moves writePos and only the consumer moves readPos, so the ring needs no lock.
-#define RING_SIZE 32768
 #define RING_MASK (RING_SIZE - 1)
-#define PRIME_FILL 6615 // 150 ms
-#define MAX_FILL 17640  // 400 ms: beyond it the host's clock has run ahead, so drop back to PRIME_FILL
-#define REPLAY_FILL 8820
 #define REPLAY_MAX_COMMAND 2048
 
 static volatile int16_t ringLeft[RING_SIZE];
@@ -27,11 +25,13 @@ static volatile int16_t ringRight[RING_SIZE];
 static volatile uint32_t writePos;
 static volatile uint32_t readPos;
 static volatile int primed;
+static volatile uint32_t primeFill;
 static volatile uint32_t underruns;
 static volatile uint32_t overruns;
 
 static PacketReceiver receiver;
 static SoundSource* source;
+static PDMenuItem* prefillItem;
 // Set while the system menu is up: the source is removed and packets that still arrive are dropped.
 static int paused;
 // Test hook: `eval` commands that pdstream.py --out recorded, fed in as fast as they play.
@@ -49,8 +49,10 @@ static struct {
     int peak;
     int clipped;
     float meterDb;
+    unsigned int lastMeterMs;
     float windowDb;
     float shownDb;
+    int shownBufferMs;
     unsigned int windowStartMs;
     int clipHold;
     unsigned int lastSecond;
@@ -97,17 +99,18 @@ static int feed(lua_State* L) {
 static int sourceCallback(void* context, int16_t* left, int16_t* right, int len) {
     (void)context;
     uint32_t fill = writePos - readPos;
+    uint32_t prime = primeFill;
 
     if (!primed) {
-        if (fill < PRIME_FILL) {
+        if (fill < prime) {
             memset(left, 0, (size_t)len * sizeof(int16_t));
             memset(right, 0, (size_t)len * sizeof(int16_t));
             return 0;
         }
         primed = 1;
     }
-    if (fill > MAX_FILL) {
-        readPos = writePos - PRIME_FILL;
+    if (fill > max_fill_samples(prime)) {
+        readPos = writePos - prime;
         overruns++;
     }
 
@@ -134,7 +137,7 @@ static int sourceCallback(void* context, int16_t* left, int16_t* right, int len)
 static void feedReplay(void) {
     static uint8_t buffer[REPLAY_MAX_COMMAND];
     static int length;
-    while (replay && writePos - readPos < REPLAY_FILL) {
+    while (replay && writePos - readPos < replay_fill_samples(primeFill)) {
         const uint8_t* newline = memchr(buffer, '\n', (size_t)length);
         int header = newline ? (int)(newline + 1 - buffer) : 0;
         int size = header > 5 && memcmp(buffer, "eval ", 5) == 0 ? 0 : -1;
@@ -270,6 +273,19 @@ static void handleInput(void) {
     if (pushed & kButtonDown) stepFormat(0, -1, 0);
 }
 
+// Dropouts count per stream: a stream starting after a gap in the packets, or switching format, begins from zero.
+static void resetDropoutsOnStart(void) {
+    static int wasReceiving, lastFormat = -1;
+    int receiving = isReceiving();
+    if (receiving && (!wasReceiving || receiver.format != lastFormat)) {
+        receiver.lost = 0;
+        underruns = 0;
+        overruns = 0;
+    }
+    wasReceiving = receiving;
+    lastFormat = receiver.format;
+}
+
 static void updateRates(void) {
     unsigned int second = pd->system->getCurrentTimeMilliseconds() / 1000;
     if (second == ui.lastSecond) return;
@@ -306,14 +322,15 @@ static void drawRow(int y, const char* label, const char* glyphs, const char* fo
 static void drawMeter(int y) {
     int framePeak = ui.peak;
     ui.peak = 0;
-    float db = framePeak > 0 ? 20.0f * log10f((float)framePeak / 32768.0f) : -60.0f;
-    ui.meterDb = db > ui.meterDb ? db : ui.meterDb - 1.0f;
-    if (ui.meterDb < -60) ui.meterDb = -60;
-    // The bar moves every frame; the number shows each window's peak so it can be read.
-    if (db > ui.windowDb) ui.windowDb = db;
+    float db = framePeak > 0 ? 20.0f * log10f((float)framePeak / 32768.0f) : METER_FLOOR_DB;
     unsigned int now = pd->system->getCurrentTimeMilliseconds();
+    ui.meterDb = meter_next_db(ui.meterDb, db, now - ui.lastMeterMs);
+    ui.lastMeterMs = now;
+    // The bar moves every frame; the number and the buffer readout change once per window so they can be read.
+    if (db > ui.windowDb) ui.windowDb = db;
     if (now - ui.windowStartMs >= 500) {
         ui.shownDb = ui.windowDb;
+        ui.shownBufferMs = samples_to_ms(writePos - readPos);
         ui.windowDb = -60;
         ui.windowStartMs = now;
     }
@@ -326,9 +343,17 @@ static void drawMeter(int y) {
     int filled = (int)((ui.meterDb + 60.0f) / 60.0f * (float)width);
     pd->graphics->drawRect(x, y, width, height, kColorBlack);
     pd->graphics->fillRect(x, y, filled, height, kColorBlack);
-    for (int mark = -48; mark < 0; mark += 12) {
-        int markX = x + (mark + 60) * width / 60;
+    if (ui.shownDb > -60) {
+        int holdX = x + (int)((ui.shownDb + 60.0f) / 60.0f * (float)width);
+        if (holdX > x + width - 1) holdX = x + width - 1;
+        pd->graphics->drawLine(holdX, y + 1, holdX, y + height - 2, 1, holdX < x + filled ? kColorWhite : kColorBlack);
+    }
+    static const char* markLabels[] = {"-48", "-36", "-24", "-12", "0"};
+    for (int i = 0; i < 5; i++) {
+        int markX = i < 4 ? x + (12 * i + 12) * width / 60 : x + width - 1;
         pd->graphics->drawLine(markX, y + height, markX, y + height + 3, 1, kColorBlack);
+        int labelWidth = pd->graphics->getTextWidth(fonts.tiny, markLabels[i], strlen(markLabels[i]), kUTF8Encoding, 0);
+        drawString(fonts.tiny, markLabels[i], markX - (labelWidth - 1) / 2, y + height + 4);
     }
     char* level = NULL;
     LCDFont* font = fonts.label;
@@ -344,6 +369,59 @@ static void drawMeter(int y) {
         int textWidth = pd->graphics->getTextWidth(font, level, strlen(level), kUTF8Encoding, 0);
         drawString(font, level, 388 - textWidth, y);
         pd->system->realloc(level, 0);
+    }
+}
+
+// What survives a restart, in the app's data folder: a magic and a version byte, then the format and
+// the pre-fill option. A file of another version is ignored.
+#define SETTINGS_FILE "settings.bin"
+#define SETTINGS_MAGIC 0x5D
+#define SETTINGS_VERSION 3
+static int savedFormat = -1;
+static int savedPrefill = PREFILL_DEFAULT_OPTION;
+
+static void loadSettings(void) {
+    SDFile* file = pd->file->open(SETTINGS_FILE, kFileReadData);
+    if (!file) return;
+    uint8_t bytes[4];
+    if (pd->file->read(file, bytes, sizeof(bytes)) == (int)sizeof(bytes) && bytes[0] == SETTINGS_MAGIC &&
+        bytes[1] == SETTINGS_VERSION) {
+        if (bytes[2] < chain_format_count) savedFormat = bytes[2];
+        if (bytes[3] < PREFILL_OPTIONS) savedPrefill = bytes[3];
+    }
+    pd->file->close(file);
+}
+
+static void saveSettings(void) {
+    SDFile* file = pd->file->open(SETTINGS_FILE, kFileWrite);
+    if (!file) return;
+    uint8_t bytes[4] = {SETTINGS_MAGIC, SETTINGS_VERSION, (uint8_t)savedFormat, (uint8_t)savedPrefill};
+    pd->file->write(file, bytes, sizeof(bytes));
+    pd->file->close(file);
+}
+
+// A stream's format is kept once it has held for a while, not while a switch is still settling.
+static void rememberFormat(void) {
+    static int candidate = -1;
+    static unsigned int sinceMs;
+    unsigned int now = pd->system->getCurrentTimeMilliseconds();
+    int format = isReceiving() ? receiver.format : -1;
+    if (format != candidate) {
+        candidate = format;
+        sinceMs = now;
+    } else if (format >= 0 && format != savedFormat && now - sinceMs > 3000) {
+        savedFormat = format;
+        saveSettings();
+    }
+}
+
+static void prefillChanged(void* userdata) {
+    (void)userdata;
+    int option = pd->system->getMenuItemValue(prefillItem);
+    primeFill = prefill_samples(option);
+    if (option != savedPrefill) {
+        savedPrefill = option;
+        saveSettings();
     }
 }
 
@@ -377,6 +455,8 @@ static int update(void* userdata) {
     feedReplay();
     handleInput();
     requestFormat();
+    resetDropoutsOnStart();
+    rememberFormat();
     updateRates();
 
     pd->graphics->clear(kColorWhite);
@@ -389,11 +469,14 @@ static int update(void* userdata) {
     drawRow(64, "Output", "Ⓑ", "%s", outputNames[ui.output]);
     int kbTenths = ui.bytesPerSecond / 100;
     drawRow(88, "Link", "", "%d eval/s, %d.%d KB/s", ui.packetsPerSecond, kbTenths / 10, kbTenths % 10);
-    drawRow(112, "Buffer", "", "%d ms", (int)((writePos - readPos) / 44));
-    drawMeter(142);
-    drawRow(166, "Dropouts", "", "%d lost, %d under, %d over", (int)receiver.lost, (int)underruns, (int)overruns);
-    drawString(fonts.value, "Computer: route audio to a cable, run", 12, 196);
-    drawString(fonts.value, "PD Audio Monitor Host", 12, 214);
+    drawRow(112, "Buffer", "", "%d ms", ui.shownBufferMs);
+    drawMeter(148);
+    if (isReceiving()) {
+        drawRow(214, "Dropouts", "", "%d lost, %d under, %d over", (int)receiver.lost, (int)underruns, (int)overruns);
+    } else {
+        drawString(fonts.value, "Computer: route audio to a cable, run", 12, 196);
+        drawString(fonts.value, "PD Audio Monitor Host", 12, 214);
+    }
     return 1;
 }
 
@@ -426,14 +509,26 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     fonts.label = loadFont("/System/Fonts/Roobert-11-Bold.pft");
     fonts.value = loadFont("/System/Fonts/Roobert-11-Medium.pft");
     fonts.glyph = loadFont("/System/Fonts/Asheville-Sans-14-Light.pft");
+    fonts.tiny = loadFont("/System/Fonts/Roobert-10-Bold.pft");
 
     packet_init(&receiver);
     ui.output = OUTPUT_SPEAKER;
     ui.wantedFormat = -1;
-    ui.meterDb = -60;
-    ui.windowDb = -60;
-    ui.shownDb = -60;
+    ui.meterDb = METER_FLOOR_DB;
+    ui.windowDb = METER_FLOOR_DB;
+    ui.shownDb = METER_FLOOR_DB;
+    ui.lastMeterMs = pd->system->getCurrentTimeMilliseconds();
     ui.lastSecond = pd->system->getCurrentTimeMilliseconds() / 1000;
+
+    static const char* prefillTitles[PREFILL_OPTIONS] = {
+        "10 ms", "20 ms", "30 ms", "40 ms", "50 ms", "60 ms", "70 ms", "80 ms", "90 ms", "100 ms", "110 ms",
+        "120 ms", "130 ms", "140 ms", "150 ms", "160 ms", "170 ms", "180 ms", "190 ms", "200 ms", "210 ms",
+        "220 ms", "230 ms", "240 ms", "250 ms", "260 ms", "270 ms", "280 ms", "290 ms", "300 ms"};
+    prefillItem = pd->system->addOptionsMenuItem("Pre-fill", prefillTitles, PREFILL_OPTIONS, prefillChanged, NULL);
+    loadSettings();
+    pd->system->setMenuItemValue(prefillItem, savedPrefill);
+    ui.wantedFormat = savedFormat;
+    prefillChanged(NULL);
 
     pd->system->setAutoLockDisabled(1);
     pd->display->setRefreshRate(50);

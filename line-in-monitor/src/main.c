@@ -11,6 +11,7 @@ static struct {
     LCDFont* label;
     LCDFont* value;
     LCDFont* glyph;
+    LCDFont* tiny;
 } fonts;
 
 // Single producer (mic callback), single consumer (source callback): only the producer moves
@@ -49,6 +50,7 @@ static struct {
     float windowDb;
     float shownDb;
     unsigned int windowStartMs;
+    unsigned int lastFrameMs;
     int clipHold;
 } ui;
 
@@ -196,15 +198,19 @@ static void drawRow(int y, const char* label, const char* glyphs, const char* fo
     drawString(fonts.glyph, glyphs, 388 - width, y + offset);
 }
 
+#define METER_DECAY_DB_PER_SEC 20.0f
+
 static void drawMeter(int y) {
     int framePeak = peak;
     peak = 0;
     float db = framePeak > 0 ? 20.0f * log10f((float)framePeak / 32768.0f) : -60.0f;
-    ui.meterDb = db > ui.meterDb ? db : ui.meterDb - 1.0f;
+    unsigned int now = pd->system->getCurrentTimeMilliseconds();
+    float fallen = ui.meterDb - METER_DECAY_DB_PER_SEC * (float)(now - ui.lastFrameMs) / 1000.0f;
+    ui.lastFrameMs = now;
+    ui.meterDb = db > fallen ? db : fallen;
     if (ui.meterDb < -60) ui.meterDb = -60;
     // The bar moves every frame; the number shows each window's peak so it can be read.
     if (db > ui.windowDb) ui.windowDb = db;
-    unsigned int now = pd->system->getCurrentTimeMilliseconds();
     if (now - ui.windowStartMs >= 500) {
         ui.shownDb = ui.windowDb;
         ui.windowDb = -60;
@@ -219,9 +225,21 @@ static void drawMeter(int y) {
     int filled = (int)((ui.meterDb + 60.0f) / 60.0f * (float)width);
     pd->graphics->drawRect(x, y, width, height, kColorBlack);
     pd->graphics->fillRect(x, y, filled, height, kColorBlack);
-    for (int mark = -48; mark < 0; mark += 12) {
-        int markX = x + (mark + 60) * width / 60;
+    if (ui.shownDb > -60) {
+        int holdX = x + (int)((ui.shownDb + 60.0f) / 60.0f * (float)width);
+        if (holdX > x + width - 1) holdX = x + width - 1;
+        pd->graphics->drawLine(holdX, y + 1, holdX, y + height - 2, 1, holdX < x + filled ? kColorWhite : kColorBlack);
+    }
+    for (int mark = -48; mark <= 0; mark += 12) {
+        int markX = mark == 0 ? x + width - 1 : x + (mark + 60) * width / 60;
         pd->graphics->drawLine(markX, y + height, markX, y + height + 3, 1, kColorBlack);
+        char* markText = NULL;
+        pd->system->formatString(&markText, "%d", mark);
+        if (markText) {
+            int markWidth = pd->graphics->getTextWidth(fonts.tiny, markText, strlen(markText), kUTF8Encoding, 0);
+            drawString(fonts.tiny, markText, markX - (markWidth - 1) / 2, y + height + 4);
+            pd->system->realloc(markText, 0);
+        }
     }
     char* level = NULL;
     LCDFont* font = fonts.label;
@@ -268,9 +286,9 @@ static int update(void* userdata) {
     drawRow(88, "Output", "Ⓑ", "%s", outputNames[ui.output]);
     drawRow(112, "Gain", "⬆ ⬇ 🎣", "%c%d.%d dB", tenths < 0 ? '-' : '+', magnitude / 10, magnitude % 10);
     drawMeter(142);
-    drawRow(166, "Dropouts", "", "%d under, %d over", (int)underruns, (int)overruns);
-    drawString(fonts.value, "Mac audio out -> splitter mic plug.", 12, 196);
-    drawString(fonts.value, "Keep peaks out of CLIP with the Mac volume.", 12, 214);
+    drawRow(176, "Dropouts", "", "%d under, %d over", (int)underruns, (int)overruns);
+    drawString(fonts.value, "Mac audio out -> splitter mic plug.", 12, 200);
+    drawString(fonts.value, "Keep peaks out of CLIP with the Mac volume.", 12, 218);
     return 1;
 }
 
@@ -292,10 +310,12 @@ int eventHandler(PlaydateAPI* playdate, PDSystemEvent event, uint32_t arg) {
     fonts.label = loadFont("/System/Fonts/Roobert-11-Bold.pft");
     fonts.value = loadFont("/System/Fonts/Roobert-11-Medium.pft");
     fonts.glyph = loadFont("/System/Fonts/Asheville-Sans-14-Light.pft");
+    fonts.tiny = loadFont("/System/Fonts/Roobert-10-Bold.pft");
 
     ui.format = chain_default_format;
     ui.output = OUTPUT_SPEAKER;
     ui.meterDb = -60;
+    ui.lastFrameMs = pd->system->getCurrentTimeMilliseconds();
     ui.windowDb = -60;
     ui.shownDb = -60;
     applyGain();
