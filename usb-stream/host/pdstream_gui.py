@@ -109,8 +109,8 @@ class App:
 
         root.title(f"{pdstream.APP_NAME} v{pdstream.app_version()}")
         self.console.log(f"{pdstream.APP_NAME} v{pdstream.app_version()}")
-        root.geometry("820x600")
-        root.minsize(700, 420)
+        root.geometry("940x600")
+        root.minsize(930, 420)
         main = ttk.Frame(root, padding=12)
         main.pack(fill="both", expand=True)
 
