@@ -9,6 +9,13 @@
       "problemMatcher": ["$gcc"]
     },
     {
+      "label": "Build and run USB receiver on Playdate",
+      "type": "shell",
+      "command": "./scripts/quickinstall.sh",
+      "args": ["-i", "./usb-stream/receiver"],
+      "problemMatcher": ["$gcc"]
+    },
+    {
       "label": "Run PD Audio Monitor Host",
       "type": "shell",
       "command": "${userHome}/.venvs/pdstream/bin/python",
