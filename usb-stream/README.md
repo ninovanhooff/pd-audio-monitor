@@ -197,7 +197,7 @@ has to be sideloaded.
 | --- | --- |
 | 0 | Format number (`chain_formats` index) |
 | 1 | Sequence number, wrapping at 256 |
-| 2–3 | Offset of the first data byte within its unit (uint16 LE) |
+| 2–3 | Offset of the first data byte within its unit (uint16 LE, bits 0–14); bit 15 is set on the first packet of a stream |
 | 4… | Stream bytes: 16-bit LE or 8-bit signed samples at the format's rate, or WAV-layout ADPCM blocks |
 
 The other way, the receiver logs `pdstream format <n>` to its console, which goes out over USB, once
@@ -207,6 +207,7 @@ sequence numbers running. When the Playdate's system menu opens, the receiver lo
 once the menu closes.
 
 After a gap in the sequence numbers, the receiver skips to the next unit boundary and goes on.
-For ADPCM that is the next block. A new format number restarts the decoder.
+For ADPCM that is the next block. A new format number restarts the decoder, and so does the restart bit: the host sets it after
+the Playdate's menu closes, when its encoder starts over at a unit boundary without a gap in the sequence numbers.
 
 Why C: Lua can't feed PCM to the audio engine, so the `eval` packets go straight to a C function.

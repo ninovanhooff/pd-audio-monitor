@@ -29,6 +29,8 @@ FORMAT_REQUEST = re.compile(rb"pdstream format (-?\d+)")
 # Packet layout is in usb-stream/receiver/src/packet.h.
 HEADER_BYTES = 4
 PACKET_BYTES = 1024
+# Set in the offset field of a stream's first packet: the receiver drops a partly received unit.
+RESTART_FLAG = 0x8000
 # pdc's compilation of `pdstream_feed("...")`: Playdate's Lua 5.4 with 4-byte integers and floats,
 # stripped. The string constant comes last, so the chunk can be built around any packet.
 EVAL_HEAD = bytes.fromhex("1b4c7561540019930d0a1a0a040404785600000040b9430180808000010285"
@@ -96,6 +98,7 @@ class Packetizer:
         self.pending = bytearray()
         self.position = 0
         self.sequence = 0
+        self.restart = True
 
     def commands(self, data, flush=False):
         self.pending += data
@@ -105,6 +108,9 @@ class Packetizer:
             chunk = bytes(self.pending[:payload])
             del self.pending[:payload]
             offset = self.position % self.unit_bytes
+            if self.restart:
+                offset |= RESTART_FLAG
+                self.restart = False
             header = bytes([self.fmt, self.sequence, offset & 0xFF, offset >> 8])
             out.append(eval_command(header + chunk))
             self.position += len(chunk)

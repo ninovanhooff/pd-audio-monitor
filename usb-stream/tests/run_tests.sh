@@ -104,5 +104,22 @@ for fmt, divisor in enumerate(divisors):
     tail = 20000 * channels
     ok = "lost 2" in counts and len(dropped) > tail and np.array_equal(dropped[-tail:], out[-tail:])
     check(f"{name}: recovers from 2 lost packets", ok, f"{counts}, {len(out) - len(dropped)} samples skipped")
+
+# A stream that restarts without a gap in the sequence (the host resumes after the Playdate's menu
+# closes) starts at a unit boundary while the receiver may be partway through a unit. The restart must
+# realign the decoder, with nothing counted as lost.
+lib = pdstream.load_encoder()
+frames = stereo.astype(np.int16)
+for fmt in range(len(divisors)):
+    channels = 1 if fmt < mono_formats else 2
+    codec = pdstream.Codec(lib, fmt)
+    first = b"".join(codec.commands(frames[:44100]))
+    codec.switch(fmt)
+    second = b"".join(codec.commands(frames[44100:88200]))
+    alone, _ = receive(commands(second))
+    both, counts = receive(commands(first) + commands(second))
+    tail = 20000 * channels
+    ok = "lost 0" in counts and len(alone) > tail and np.array_equal(both[-tail:], alone[-tail:])
+    check(f"format {fmt}: a restarted stream realigns the decoder", ok, counts)
 sys.exit(1 if failed else 0)
 PY
