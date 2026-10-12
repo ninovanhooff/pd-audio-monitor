@@ -109,8 +109,8 @@ class App:
 
         root.title(f"{pdstream.APP_NAME} v{pdstream.app_version()}")
         self.console.log(f"{pdstream.APP_NAME} v{pdstream.app_version()}")
-        root.geometry("760x600")
-        root.minsize(560, 420)
+        root.geometry("940x600")
+        root.minsize(930, 420)
         main = ttk.Frame(root, padding=12)
         main.pack(fill="both", expand=True)
 
@@ -146,6 +146,10 @@ class App:
                             else self.lib.pdstream_default_format())
         self.format.pack(side="left", padx=(4, 12))
         self.format.bind("<<ComboboxSelected>>", lambda event: self.pick_format())
+        self.adpcm_xq = tk.BooleanVar(value=self.settings.get("adpcm_xq") is True)
+        self.xq_toggle = ttk.Checkbutton(controls, text="ADPCM-XQ", variable=self.adpcm_xq, command=self.pick_adpcm_xq)
+        self.xq_toggle.pack(side="left")
+        self.update_xq_toggle()
         self.toggle = ttk.Button(controls, text="Stop", command=self.toggle_stream)
         self.toggle.pack(side="right")
         ttk.Button(controls, text="↻", width=2, command=lambda: (self.list_devices(), self.restart_stream())).pack(side="right", padx=4)
@@ -215,7 +219,7 @@ class App:
     def start_stream(self):
         fmt = self.format.current()
         self.stop = threading.Event()
-        self.codec = pdstream.Codec(self.lib, fmt)
+        self.codec = pdstream.Codec(self.lib, fmt, self.adpcm_xq.get())
         self.sink = pdstream.SerialSink(None, verbose=True)
         stats = pdstream.Stats(self.formats[fmt])
         self.worker = threading.Thread(target=self.run, daemon=True,
@@ -261,8 +265,19 @@ class App:
         subprocess.Popen(["open", "-n", app] if app else [sys.executable, *sys.argv])
         self.root.destroy()
 
+    def update_xq_toggle(self):
+        # ADPCM-XQ replaces the encoder of the ADPCM formats only.
+        adpcm = self.lib.pdstream_is_adpcm(self.format.current())
+        self.xq_toggle.state(["!disabled"] if adpcm else ["disabled"])
+
+    def pick_adpcm_xq(self):
+        self.remember(adpcm_xq=self.adpcm_xq.get())
+        if self.codec:
+            self.codec.adpcm_xq = self.adpcm_xq.get()
+
     def pick_format(self):
         self.remember(format=self.format.current())
+        self.update_xq_toggle()
         if self.running():
             self.sink.requested_format = self.format.current()  # as if the Playdate asked: the stream thread switches
 
@@ -305,6 +320,7 @@ class App:
         if self.codec and self.running() and self.format.current() != self.codec.format:
             self.format.current(self.codec.format)
             self.remember(format=self.codec.format)
+            self.update_xq_toggle()
         self.root.after(250, self.poll)
 
 

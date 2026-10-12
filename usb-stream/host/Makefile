@@ -10,7 +10,10 @@ else
 LIB = libpdstream.so
 endif
 
-$(LIB): encoder.c $(CODEC)/format_stream.c $(CODEC)/format_chain.c $(CODEC)/ima_adpcm.c $(wildcard $(CODEC)/*.h)
+XQ = $(CODEC)/adpcm_xq
+
+$(LIB): encoder.c $(CODEC)/format_stream.c $(CODEC)/format_chain.c $(CODEC)/ima_adpcm.c $(CODEC)/adpcm_xq_encoder.c \
+		$(XQ)/adpcm-lib.c $(XQ)/adpcm-dns.c $(wildcard $(CODEC)/*.h $(XQ)/*.h)
 	$(CC) -std=c11 -O2 -Wall -Wextra -shared $(SHARED) -I$(CODEC) -o $@ $(filter %.c,$^) -lm
 
 PYTHON ?= python3

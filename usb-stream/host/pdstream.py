@@ -124,7 +124,8 @@ def load_encoder():
     else:
         sys.exit(f"libpdstream not built: run `make -C {here}`")
     lib.pdstream_new.restype = ctypes.c_void_p
-    lib.pdstream_new.argtypes = [ctypes.c_int]
+    lib.pdstream_new.argtypes = [ctypes.c_int, ctypes.c_int]
+    lib.pdstream_is_adpcm.argtypes = [ctypes.c_int]
     lib.pdstream_free.argtypes = [ctypes.c_void_p]
     lib.pdstream_encode.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p]
     lib.pdstream_format_channels.argtypes = [ctypes.c_int]
@@ -133,9 +134,12 @@ def load_encoder():
 
 
 class Encoder:
-    def __init__(self, lib, fmt):
+    def __init__(self, lib, fmt, adpcm_xq=False):
         self.lib = lib
-        self.handle = lib.pdstream_new(fmt)
+        self.adpcm_xq = adpcm_xq
+        self.handle = lib.pdstream_new(fmt, adpcm_xq)
+        if not self.handle:
+            raise RuntimeError(f"no encoder for format {fmt}")
         self.channels = lib.pdstream_format_channels(fmt)
         self.out = ctypes.create_string_buffer(2 * self.channels * BLOCK + 4096)
 
@@ -181,9 +185,11 @@ class Codec:
     """Encoder and packetizer for the current format. switch() keeps the sequence numbers running, so
     the receiver sees a format change rather than lost packets."""
 
-    def __init__(self, lib, fmt):
+    def __init__(self, lib, fmt, adpcm_xq=False):
         self.lib = lib
         self.paused = False
+        # Encode ADPCM formats with ADPCM-XQ instead of the greedy encoder. Set from any thread: commands() applies it.
+        self.adpcm_xq = adpcm_xq
         self.encoder = self.packetizer = None
         self.switch(fmt)
 
@@ -192,11 +198,13 @@ class Codec:
         if self.encoder:
             self.lib.pdstream_free(self.encoder.handle)
         self.format = fmt
-        self.encoder = Encoder(self.lib, fmt)
+        self.encoder = Encoder(self.lib, fmt, self.adpcm_xq)
         self.packetizer = Packetizer(fmt, self.lib.pdstream_unit_bytes(fmt))
         self.packetizer.sequence = sequence
 
     def commands(self, frames, flush=False):
+        if self.adpcm_xq != self.encoder.adpcm_xq:
+            self.switch(self.format)
         if self.encoder.channels == 1:
             frames = (frames.astype(np.int32).sum(axis=1) // 2).astype(np.int16)
         return self.packetizer.commands(self.encoder.encode(frames), flush)
@@ -619,6 +627,8 @@ def main():
                                      epilog="formats:\n" + "\n".join(f"  {i}  {n}" for i, n in enumerate(formats)))
     parser.add_argument("--format", type=int, default=lib.pdstream_default_format(),
                         help="format number, see below; the Playdate's d-pad switches it while streaming")
+    parser.add_argument("--adpcm-xq", action="store_true",
+                        help="encode ADPCM formats with ADPCM-XQ (look-ahead: better quality, more CPU)")
     parser.add_argument("--device", help="input device name or part of it (default: the first of "
                                          + ", ".join(PREFERRED_DEVICES) + " found)")
     parser.add_argument("--input", type=Path, help="stream a 16-bit 44.1 kHz WAV file instead of a device")
@@ -630,7 +640,7 @@ def main():
     if not 0 <= args.format < len(formats):
         parser.error(f"--format must be 0 to {len(formats) - 1}")
 
-    codec = Codec(lib, args.format)
+    codec = Codec(lib, args.format, args.adpcm_xq)
     sink = FileSink(args.out) if args.out else SerialSink(args.port, args.verbose)
     stats = Stats(formats[args.format])
     try:
