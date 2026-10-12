@@ -4,7 +4,8 @@
 #include <string.h>
 
 // samplesPerBlock follows libsndfile (and so Audacity): 256/512/1024-byte blocks below 12 kHz,
-// below 23 kHz and above.
+// below 23 kHz and above. A QOA frame holds 25, 50 or 100 slices, about as long in time as an ADPCM block
+// (the format's 256 slices would last 116 to 464 ms).
 const ChainFormat chain_formats[] = {
     {"44.1 kHz 16-bit mono (bypass)", "44kHz 16bit 1ch (bypass)", 1, CODEC_PCM16, 0, 1},
     {"44.1 kHz 8-bit mono", "44kHz 8bit 1ch", 1, CODEC_PCM8, 0, 1},
@@ -15,6 +16,9 @@ const ChainFormat chain_formats[] = {
     {"11.025 kHz 16-bit mono", "11kHz 16bit 1ch", 4, CODEC_PCM16, 0, 1},
     {"11.025 kHz 8-bit mono", "11kHz 8bit 1ch", 4, CODEC_PCM8, 0, 1},
     {"11.025 kHz IMA ADPCM mono", "11kHz ADPCM 1ch", 4, CODEC_ADPCM, 505, 1},
+    {"44.1 kHz QOA mono", "44kHz QOA 1ch", 1, CODEC_QOA, 2000, 1},
+    {"22.05 kHz QOA mono", "22kHz QOA 1ch", 2, CODEC_QOA, 1000, 1},
+    {"11.025 kHz QOA mono", "11kHz QOA 1ch", 4, CODEC_QOA, 500, 1},
     {"44.1 kHz 16-bit stereo (bypass)", "44kHz 16bit 2ch (bypass)", 1, CODEC_PCM16, 0, 2},
     {"44.1 kHz 8-bit stereo", "44kHz 8bit 2ch", 1, CODEC_PCM8, 0, 2},
     {"44.1 kHz IMA ADPCM stereo", "44kHz ADPCM 2ch", 1, CODEC_ADPCM, 2041, 2},
@@ -24,9 +28,12 @@ const ChainFormat chain_formats[] = {
     {"11.025 kHz 16-bit stereo", "11kHz 16bit 2ch", 4, CODEC_PCM16, 0, 2},
     {"11.025 kHz 8-bit stereo", "11kHz 8bit 2ch", 4, CODEC_PCM8, 0, 2},
     {"11.025 kHz IMA ADPCM stereo", "11kHz ADPCM 2ch", 4, CODEC_ADPCM, 505, 2},
+    {"44.1 kHz QOA stereo", "44kHz QOA 2ch", 1, CODEC_QOA, 2000, 2},
+    {"22.05 kHz QOA stereo", "22kHz QOA 2ch", 2, CODEC_QOA, 1000, 2},
+    {"11.025 kHz QOA stereo", "11kHz QOA 2ch", 4, CODEC_QOA, 500, 2},
 };
 const int chain_format_count = sizeof(chain_formats) / sizeof(chain_formats[0]);
-const int chain_mono_format_count = 9;
+const int chain_mono_format_count = 12;
 const int chain_default_format = 5;
 
 static void design_lowpass(FormatChain* chain, int divisor) {
@@ -56,6 +63,7 @@ void chain_init(FormatChain* chain, const ChainFormat* format) {
     memset(chain, 0, sizeof(*chain));
     chain->format = format;
     chain->adpcm.rounding = IMA_ROUNDING_SHIFT_ADD;
+    qoa_encoder_init(&chain->qoa);
     design_lowpass(chain, format->divisor);
 }
 
@@ -90,6 +98,17 @@ static int16_t quantize(FormatChain* chain, int16_t sample) {
         }
         if (++chain->blockPos == chain->format->samplesPerBlock) chain->blockPos = 0;
         return sample;
+    case CODEC_QOA: {
+        const int slicePos = chain->blockPos % QOA_SLICE_SAMPLES;
+        const int16_t decoded = chain->qoaDecoded[slicePos];
+        chain->qoaPending[slicePos] = sample;
+        if (slicePos == QOA_SLICE_SAMPLES - 1) {
+            if (chain->blockPos < QOA_SLICE_SAMPLES) qoa_encoder_start_frame(&chain->qoa);
+            qoa_encode_slice(&chain->qoa, chain->qoaPending, QOA_SLICE_SAMPLES, chain->qoaDecoded);
+        }
+        if (++chain->blockPos == chain->format->samplesPerBlock) chain->blockPos = 0;
+        return decoded;
+    }
     }
     return sample;
 }

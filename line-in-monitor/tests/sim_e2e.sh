@@ -8,11 +8,11 @@ here="$(cd "$(dirname "$0")" && pwd)"
 pdx="$here/../LineInMonitor.pdx"
 sdk="${PLAYDATE_SDK_PATH:?set PLAYDATE_SDK_PATH}"
 work="${TMPDIR:-/tmp}/line-in-e2e"
-seconds=12
+seconds=14
 mkdir -p "$work"
 
 codec="$here/../../shared/codec"
-cc -std=c11 -O2 -o "$work/chain_render" "$codec/tests/chain_render.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" -lm
+cc -std=c11 -O2 -o "$work/chain_render" "$codec/tests/chain_render.c" "$codec/format_chain.c" "$codec/ima_adpcm.c" "$codec/qoa.c" -lm
 
 # Skip the first-run dialogs and the mic permission prompt.
 mkdir -p "$sdk/Disk/Data/nl.ninovanhooff.lineinmonitor" "$HOME/.config/Playdate Simulator"
@@ -51,26 +51,29 @@ run() {
     wait 2>/dev/null || true
 }
 
-run bypass 643,387                 # A: compare with bypass
-run pcm22 410,397 410,397          # right x2: 22.05 kHz 16-bit
+run bypass 643,387                                         # A: compare with bypass
+run pcm22 325,397 325,397                                  # left x2 from the default (5): 3, 22.05 kHz 16-bit
+run qoa22 410,397 410,397 410,397 410,397 410,397          # right x5: 10, 22.05 kHz QOA
 "$work/chain_render" 0 < "$work/input.raw" > "$work/bypass_ref.raw"
-"$work/chain_render" 5 < "$work/input.raw" > "$work/pcm22_ref.raw"
+"$work/chain_render" 3 < "$work/input.raw" > "$work/pcm22_ref.raw"
+"$work/chain_render" 10 < "$work/input.raw" > "$work/qoa22_ref.raw"
 
 python3 - "$work" <<'PY'
 import sys, numpy as np
 work = sys.argv[1]
 rate, window = 44100, 11025
 failed = False
-for name in ("bypass", "pcm22"):
+for name in ("bypass", "pcm22", "qoa22"):
     rec = np.fromfile(f"{work}/{name}.raw", "<i2").astype(float)
     ref = np.fromfile(f"{work}/{name}_ref.raw", "<i2").astype(float)
     # The app starts after the input does, so align a stretch of the recording within the reference.
-    seg = rec[4 * rate:5 * rate]
+    # Past the clicks that pick the format, which take until about 7 s.
+    seg = rec[8 * rate:9 * rate]
     n = len(ref) + len(seg)
     corr = np.fft.irfft(np.fft.rfft(ref, n) * np.conj(np.fft.rfft(seg, n)), n)[: len(ref)]
-    offset = int(np.argmax(corr)) - 4 * rate
+    offset = int(np.argmax(corr)) - 8 * rate
     worst = -999.0
-    for start in range(4 * rate, 8 * rate, window):
+    for start in range(8 * rate, 12 * rate, window):
         r = rec[start:start + window]
         x = ref[start + offset:start + offset + window]
         if len(r) < window or len(x) < window or not r.any() or not x.any():

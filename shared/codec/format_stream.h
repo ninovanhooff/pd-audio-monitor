@@ -7,9 +7,11 @@
 
 // The format chain split across a link: the sender decimates and encodes to the format's bytes, the
 // receiver decodes and interpolates back to 44.1 kHz. Together they reproduce chain_process exactly,
-// delayed by divisor - 1 samples, on each channel. A unit is one sample per channel for PCM (16-bit
-// little-endian, or 8-bit signed) and one WAV-layout block per channel for ADPCM; a stereo unit holds the
-// left channel's bytes, then the right's. Frames hold one sample per channel, interleaved.
+// delayed by divisor - 1 samples, on each channel (QOA: plus the chain's slice of delay). A unit is one
+// sample per channel for PCM (16-bit little-endian, or 8-bit signed), one WAV-layout block per channel for
+// ADPCM, and one frame for QOA; a stereo PCM or ADPCM unit holds the left channel's bytes, then the right's.
+// A QOA frame is the format's own, channels interleaved, but short: samplesPerBlock samples per channel.
+// Frames hold one sample per channel, interleaved.
 
 #define STREAM_MAX_CHANNELS 2
 #define STREAM_MAX_BLOCK_SAMPLES 2041
@@ -20,6 +22,7 @@ int stream_unit_bytes(const ChainFormat* format);
 
 typedef struct {
     FormatChain chains[STREAM_MAX_CHANNELS];
+    QoaEncoder qoa[STREAM_MAX_CHANNELS];
     int16_t block[STREAM_MAX_CHANNELS][STREAM_MAX_BLOCK_SAMPLES];
     int count;
 } StreamEncoder;

@@ -15,7 +15,7 @@ endif
 CODEC = $(abspath ../../shared/codec)
 
 VPATH += src
-SRC = src/main.c src/packet.c $(CODEC)/ima_adpcm.c $(CODEC)/format_chain.c $(CODEC)/format_stream.c
+SRC = src/main.c src/packet.c $(CODEC)/ima_adpcm.c $(CODEC)/qoa.c $(CODEC)/format_chain.c $(CODEC)/format_stream.c
 UINCDIR = $(CODEC)
 UASRC =
 UDEFS =

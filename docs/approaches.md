@@ -74,7 +74,10 @@ Alternatively, the native ADPCM path: `newSampleFromData(…, kSoundADPCMMono, �
 
 | Format | Raw | Over `eval` | base64 over `msg` |
 | --- | --- | --- | --- |
+| QOA mono 11.025 kHz | 4.9 KB/s | 5.4 KB/s | 6.6 KB/s |
+| QOA mono 22.05 kHz | 9.3 KB/s | 10 KB/s | 12.5 KB/s |
 | ADPCM mono 22.05 kHz (default) | 11.0 KB/s | 12 KB/s | 14.7 KB/s |
+| QOA mono 44.1 kHz | 18.2 KB/s | 20 KB/s | 24.2 KB/s |
 | ADPCM mono 44.1 kHz | 22.1 KB/s | 24 KB/s | 29.4 KB/s |
 | 8-bit mono 22.05 kHz | 22.1 KB/s | 24 KB/s | 29.4 KB/s |
 | 8-bit mono 44.1 kHz | 44.1 KB/s | 48 KB/s | 58.8 KB/s |
@@ -83,7 +86,9 @@ Alternatively, the native ADPCM path: `newSampleFromData(…, kSoundADPCMMono, �
 | 16-bit mono 44.1 kHz | 88.2 KB/s | 96 KB/s | 118 KB/s |
 | 16-bit stereo 44.1 kHz | 176.4 KB/s | 192 KB/s | 235 KB/s |
 
-The speaker mixes both channels to mono (SDK 1.13), so stereo only matters on headphones.
+The speaker mixes both channels to mono (SDK 1.13), so stereo only matters on headphones. QOA's rows
+count the stream's frames (100, 50 or 25 slices; frame header and LMS state included), which is 3.3 to
+3.6 bits per sample; a 256-slice file takes 3.2 plus its headers.
 
 ## Codec facts we pinned down
 
@@ -97,6 +102,40 @@ The speaker mixes both channels to mono (SDK 1.13), so stereo only matters on he
   (Simulator, −90 dB residual, *measured*; the device must match).
 - Encoders differ more than decoders. Greedy (Audacity, ffmpeg) vs look-ahead (`adpcm-xq`) is
   audible, so the chain uses the greedy reference encoder, which matches `audioop` bit-for-bit.
+
+## QOA
+
+[QOA](https://qoaformat.org) is a lossy time-domain codec: a four-tap sign-sign LMS filter predicts each
+sample and a 3-bit code corrects it, scaled by one of 16 scalefactors per 20-sample slice. The Playdate
+doesn't play it: SDK 3.1.2's `SoundFormat` stops at 8/16-bit PCM and ADPCM, and the docs add only MP3.
+A game would ship `.qoa` files and decode them with its own C (the reference decoder is about 400
+lines), so the QOA formats emulate that, with the system's linear upsampling assumed for the rates
+below 44.1 kHz.
+
+- Our encoder writes the same bytes as the reference encoder (phoboslab/qoa `qoa.h`) for the signals
+  we tried, including the 32-bit wraparound the reference relies on in its scalefactor division
+  (*measured*, `shared/codec/tests/check.py`). Our decoder matches one written from the spec.
+- QOA files hold 256 slices per frame (5120 samples: 116 ms at 44.1 kHz, 464 ms at 11.025 kHz). The
+  stream uses 100, 50 or 25 slices to keep a unit's length near an ADPCM block's. The LMS state sits in
+  every frame header, so the frame length shouldn't change the decoded audio, and on 11 test signals
+  (noise, square waves, bursts, silence, sweeps) no sample differed between 256, 100, 50 and 25 slices
+  (*measured*; `check.py` compares a stream with a file). A tie between two scalefactors could break it,
+  as the reference encoder restarts its search at scalefactor 0 in every frame.
+- Digital silence decodes to ±1 LSB (about −92 dBFS, *measured*): no code means zero.
+- SNR on synthetic 44.1 kHz signals, against 8-bit and ADPCM (*measured* with `chain_render`):
+
+  | Signal | Level | 8-bit | ADPCM | QOA |
+  | --- | --- | --- | --- | --- |
+  | Four tones, 50 dB noise floor | −6 dBFS | 38.0 dB | 28.2 dB | 35.9 dB |
+  | | −54 dBFS | 0.0 dB | 27.4 dB | 30.2 dB |
+  | Smoothed white noise | −6 dBFS | 33.1 dB | 22.9 dB | 21.6 dB |
+  | | −54 dBFS | 0.0 dB | 22.6 dB | 14.4 dB |
+  | Decaying noise bursts | −6 dBFS | 26.7 dB | 11.9 dB | 15.3 dB |
+  | | −54 dBFS | 0.0 dB | 13.6 dB | 9.1 dB |
+
+  QOA is ahead of ADPCM on tonal material and loud bursts, and behind it on quiet noise.
+- The encoder tries all 16 scalefactors per slice, stopping a try as soon as it can't win: 2 to 7 trial
+  samples per sample on the host. On the device **(measure)**.
 
 ## Order of work
 
